@@ -61,6 +61,10 @@ The terminal captures come from a real session (Claude Code 2.1.293, Claude Haik
 
 ![VS Code status bar and hover](docs/screens/07-vscode-status-bar.png)
 
+**Handoff reminder in VS Code**: once the chat in front of you passes the reminder threshold, once per crossing; **Copy command** puts `/context-guard:handoff` on the clipboard:
+
+![VS Code handoff reminder](docs/screens/08-vscode-handoff-reminder.png)
+
 **Usage line** above the prompt (and, in the terminal, on the status line):
 
 ![Usage line](docs/screens/01-usage-line.png)
