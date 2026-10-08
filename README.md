@@ -4,8 +4,6 @@ Marketplace `strzelichowski-solutions` with one plugin, `context-guard`, plus an
 
 ## Install
 
-The repository is private: you need read access to it (ask to be added as a collaborator) and git credentials for github.com (`gh auth login`).
-
 In Claude Code (terminal or VS Code panel):
 
 ```
@@ -32,7 +30,7 @@ code --install-extension context-guard-status.vsix
 | `/context-guard:handoff`: writes `~/.claude/handoffs/<repo>/<branch>.md` and prints an opener for a fresh session; never commits, pushes, stages or stashes | yes | yes |
 | Handoff reminder once the main conversation passes **60%** of the model's context | band above the prompt + notification | yellow status bar item + notification with "Copy command" |
 | Auto-compact of the main conversation at **65%** | yes | yes |
-| Context fill, 5-hour and weekly usage limits with time to reset, session cost | status line under the prompt | status bar item, details in its tooltip |
+| Context fill, 5-hour and weekly usage limits with time to reset, session cost | status line under the prompt | status bar item; hover for bars, reset times and other sessions; click for a menu: usage details panel, copy the handoff command, copy `/usage` and open Claude |
 | Token ceiling for subagents (default Claude Haiku 5.5, **100k**): an oversized tool result is cut so the next request stays under the ceiling; the subagent keeps working | yes | yes |
 
 Usage limits appear on a Claude subscription only; with an API key the line shows context and cost. Everything refreshes after each turn.
