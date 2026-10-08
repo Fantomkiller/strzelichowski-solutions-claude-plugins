@@ -33,12 +33,9 @@ It sets `modelSettings.claude-haiku-5-5.autoCompactWindow` to 128000 in `~/.clau
 
 **3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times; a click opens the same in a panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
-```
-gh release download --repo Fantomkiller/strzelichowski-solutions-claude-plugins --pattern '*.vsix'   # or take it from vscode-context-guard/ in a clone
-code --install-extension context-guard-status.vsix
-```
-
-Then run "Developer: Reload Window" in each VS Code window.
+1. Download [context-guard-status.vsix](https://github.com/Fantomkiller/strzelichowski-solutions-claude-plugins/releases/latest/download/context-guard-status.vsix) from the latest release.
+2. In VS Code: Extensions view, `...` menu, **Install from VSIX...**, pick the file. (Or from a shell: `code --install-extension context-guard-status.vsix`.)
+3. Run **Developer: Reload Window** in each VS Code window.
 
 ## What it does
 
