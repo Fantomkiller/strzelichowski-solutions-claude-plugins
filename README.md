@@ -23,11 +23,13 @@ In VS Code you can also open this link, which goes straight to the plugin's inst
 
 From a local copy (unzipped or cloned), pass its path to `marketplace add` instead. Start new sessions afterwards. Later updates: `claude plugin marketplace update strzelichowski-solutions`, then `claude plugin update context-guard@strzelichowski-solutions`.
 
-**2. Haiku 5.5 subagents (recommended).** So that they compact at ~95k, under their 5x price step at 100k, add to `~/.claude/settings.json` (details in [Subagent compaction](#subagent-compaction)):
+**2. Haiku 5.5 subagents.** So that they compact at ~95k, under their 5x price step at 100k, run once in Claude Code:
 
-```json
-{ "modelSettings": { "claude-haiku-5-5": { "autoCompactWindow": 128000 } } }
 ```
+/context-guard-setup
+```
+
+It sets `modelSettings.claude-haiku-5-5.autoCompactWindow` to 128000 in `~/.claude/settings.json`, keeps everything else, and leaves a backup next to it (`settings.json.bak-context-guard`). Each session start says so in the chat while it is not set. From a shell: `claude -p /context-guard-setup`. Details in [Subagent compaction](#subagent-compaction).
 
 **3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times; a click opens the same in a panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
@@ -104,7 +106,7 @@ Every option can be changed interactively:
 
 ## Subagent compaction
 
-The plugin cannot compact a subagent; Claude Code does that by itself, before the request that would pass the model's compaction point. That point is the compaction window less a fixed 33k buffer (`/context` shows it as "Autocompact buffer"); `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` does not move it. To make a Claude Haiku 5.5 subagent compact at ~95k, just below its 5x price step at 100k, and keep working, add to `~/.claude/settings.json`:
+The plugin cannot compact a subagent; Claude Code does that by itself, before the request that would pass the model's compaction point. That point is the compaction window less a fixed 33k buffer (`/context` shows it as "Autocompact buffer"); `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` does not move it. To make a Claude Haiku 5.5 subagent compact at ~95k, just below its 5x price step at 100k, and keep working, run `/context-guard-setup`, which writes this to `~/.claude/settings.json` (the window is the plugin's compaction point plus 33000):
 
 ```json
 {

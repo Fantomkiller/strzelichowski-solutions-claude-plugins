@@ -2,7 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
 import type { Fill, Level, UsagePart } from '../types'
+import { isConfigured, planSetup, windowFor } from './setup'
 import { createSubagentCap } from './subagent-cap'
+import type { SubagentCap } from './subagent-cap'
 
 const fill = atom({ plugin: 'context-guard', key: 'fill' } as const, null)
 const isHidden = atom({ plugin: 'context-guard', key: 'isHidden' } as const, false)
@@ -125,6 +127,50 @@ const report = async ($: EngineInterface, settings: Settings, usage: Usage) => {
   if (settings.usageBand) await update($, usageLine, () => (parts.length > 0 ? parts : null))
 }
 
+// /context-guard-setup: the capped models' compaction window in ~/.claude/settings.json.
+const SETUP_COMMAND = 'context-guard-setup'
+
+const settingsFile = async ($: EngineInterface) => {
+  const home = await $.env.get('HOME')
+  return home === undefined ? undefined : `${home}/.claude/settings.json`
+}
+
+const readText = async ($: EngineInterface, path: string) => {
+  const text = await $.fs.read(path).catch(() => '')
+  return typeof text === 'string' ? text : ''
+}
+
+const runSetup = async ($: EngineInterface, cap: SubagentCap) => {
+  const path = await settingsFile($)
+  if (path === undefined) return 'context-guard setup: HOME is not set, nothing changed.'
+  const before = await readText($, path)
+  const plan = planSetup(before, cap.models, cap.compactAt)
+  if (plan.error !== undefined) {
+    return `context-guard setup: ${path} does not parse (${plan.error}); nothing changed.`
+  }
+  if (plan.text === undefined) {
+    return `context-guard setup: already set; subagents on ${cap.models.join(', ')} compact at about ${Math.round(cap.compactAt / 1000)}k.`
+  }
+  if (before !== '') await $.fs.write(`${path}.bak-context-guard`, before)
+  await $.fs.write(path, plan.text)
+  return [
+    `context-guard setup: ${path} updated${before !== '' ? ` (backup: ${path}.bak-context-guard)` : ''}:`,
+    ...plan.changes.map(c => `  ${c}`),
+    `Subagents on ${cap.models.join(', ')} now compact at about ${Math.round(cap.compactAt / 1000)}k, under the ${Math.round(cap.ceiling / 1000)}k ceiling. Start a new session for it to apply.`,
+  ].join('\n')
+}
+
+// At session start: one notice (never sent to the model) when the capped models would compact too early.
+const checkSetup = async ($: EngineInterface, cap: SubagentCap) => {
+  const path = await settingsFile($)
+  if (path === undefined) return
+  if (isConfigured(await readText($, path), cap.models, cap.compactAt, cap.ceiling)) return
+  $.ui.log(
+    `⚠ [context-guard] Subagents on ${cap.models.join(', ')} are not set to compact at about ${Math.round(cap.compactAt / 1000)}k ` +
+      `(autoCompactWindow ${windowFor(cap.compactAt)}): run /${SETUP_COMMAND}`,
+  )
+}
+
 export const register: Register = (on, options) => {
   const subagentCap = createSubagentCap(options)
 
@@ -166,6 +212,10 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     activeAt = Date.now()
     const r = await next(e)
+    if (subagentCap.isEnabled && subagentCap.models.length > 0) {
+      await $.command.register({ name: SETUP_COMMAND, description: 'Set the capped subagents\' compaction window in ~/.claude/settings.json' }).catch(() => undefined)
+      await checkSetup($, subagentCap).catch(() => undefined)
+    }
     if (!settings.usageStatus && !settings.usageBand && !settings.statusFile) return r
     const usage = await $.session.usage()
     lastUsage = usage
@@ -238,6 +288,8 @@ export const register: Register = (on, options) => {
     if (!delegationGuidance || !subagentCap.isEnabled || !subagentCap.isCappedTarget(e.model ?? e.parentModel)) return next(e)
     return next({ ...e, prompt: `${e.prompt}\n\n${subagentCap.subagentNote}` })
   }).catch(($, e, next) => next(e))
+
+  on('command.run', { command: SETUP_COMMAND }, async $ => ({ text: await runSetup($, subagentCap) }))
 
   // Fires after each main-thread turn: the only point the fill is read and acted on.
   on('session.measure', async ($, e, next) => {

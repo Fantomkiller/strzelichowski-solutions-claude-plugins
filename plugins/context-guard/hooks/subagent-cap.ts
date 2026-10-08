@@ -30,6 +30,10 @@ type Budget = {
 
 export type SubagentCap = {
   isEnabled: boolean
+  // The ceiling, the compaction point and the capped models' id fragments, as configured.
+  ceiling: number
+  compactAt: number
+  models: readonly string[]
   // After each subagent request: which model it ran on and what the API reported.
   observeStep: (agentId: string, model: string, usage: ModelUsage | null) => void
   // After a subagent compaction; true when the loop is a capped one.
@@ -96,6 +100,9 @@ export const createSubagentCap = (options: PluginOptions): SubagentCap => {
 
   return {
     isEnabled,
+    ceiling,
+    compactAt,
+    models,
     isCappedTarget,
     orchestratorNote,
     subagentNote,
