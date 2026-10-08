@@ -29,7 +29,7 @@ From a local copy (unzipped or cloned), pass its path to `marketplace add` inste
 { "modelSettings": { "claude-haiku-5-5": { "autoCompactWindow": 128000 } } }
 ```
 
-**3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times, click for a menu with a usage panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
+**3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times; a click opens the same in a panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
 ```
 gh release download --repo Fantomkiller/strzelichowski-solutions-claude-plugins --pattern '*.vsix'   # or take it from vscode-context-guard/ in a clone

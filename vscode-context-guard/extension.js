@@ -1,7 +1,7 @@
 // Context Guard status: shows what the context-guard Claude Code plugin writes to
 // ~/.claude/context-guard/sessions/*.json (one file per session) on the VS Code
 // status bar, for the chat of this window used last: each figure colored by its level,
-// with a detailed hover, a click menu and a usage panel, and a reminder to hand off
+// with a detailed hover (a click opens the same in a panel), and a reminder to hand off
 // once the context passes the plugin's reminder threshold.
 const vscode = require('vscode')
 const fs = require('fs')
@@ -168,7 +168,7 @@ const pick = (entries, focused) => {
   if (focused !== undefined && (chat === undefined || focused.at > lastUsed(chat))) {
     chat = here.find(e => isTabOf(focused.label, titleOf(e)))
   }
-  return { chat, others: here.filter(e => e !== chat), limits: entries[0]?.rateLimits ?? [] }
+  return { chat, limits: entries[0]?.rateLimits ?? [] }
 }
 
 const isReminderDue = e =>
@@ -179,9 +179,9 @@ const chatLabel = e => {
   return `${title ? `${title} · ` : ''}${e.model || 'model unknown'} · used ${new Date(lastUsed(e)).toLocaleTimeString()}`
 }
 
-const tooltipFor = ({ chat: e, others, limits }, now) => {
+const tooltipFor = ({ chat: e, limits }, now) => {
   const t = new vscode.MarkdownString(undefined, true)
-  t.isTrusted = { enabledCommands: ['contextGuard.showDetails', 'contextGuard.copyHandoff', 'contextGuard.openUsage', CLAUDE_FOCUS] }
+  t.isTrusted = { enabledCommands: ['contextGuard.showDetails', CLAUDE_FOCUS] }
   t.supportThemeIcons = true
   t.supportHtml = true
   t.appendMarkdown(`**Claude Code** · ${e ? titleOf(e) || e.model || 'model unknown' : 'no reading for this chat yet'}\n\n`)
@@ -205,22 +205,15 @@ const tooltipFor = ({ chat: e, others, limits }, now) => {
       `Handoff reminder ${e.reminderEnabled ? `at ${e.reminderPercent}%` : 'off'} · auto-compact ${e.compactEnabled ? `at ${e.compactPercent}%` : 'off'}\n\n`,
     )
   }
-  if (others.length > 0) {
-    t.appendMarkdown(`---\n\nOther chats in this window:\n\n`)
-    for (const o of others.slice(0, 5)) {
-      t.appendMarkdown(`- ${colored(contextLevel(o), `context ${o.context.percent ?? '?'}%`)} · ${chatLabel(o)}\n`)
-    }
-    t.appendMarkdown('\n')
-  }
   if (e) t.appendMarkdown(`---\n\n${path.basename(e.cwd)} · ${chatLabel(e)}\n\n`)
   t.appendMarkdown(
-    `[$(graph) Details](command:contextGuard.showDetails) · [$(copy) Copy handoff](command:contextGuard.copyHandoff) · ` +
-      `[$(pulse) /usage](command:contextGuard.openUsage) · [$(comment-discussion) Open Claude](command:${CLAUDE_FOCUS})`,
+    `[$(graph) Details](command:contextGuard.showDetails) · [$(comment-discussion) Open Claude](command:${CLAUDE_FOCUS})`,
   )
   return t
 }
 
-const detailsHtml = ({ chat: e, others, limits }, now) => {
+// The same as the hover, in a panel that stays open and refreshes.
+const detailsHtml = ({ chat: e, limits }, now) => {
   const row = (label, percent, sub, level) => `
     <div class="row">
       <div class="label"><span>${escapeHtml(label)}</span><span class="${level}">${percent}%</span></div>
@@ -231,7 +224,7 @@ const detailsHtml = ({ chat: e, others, limits }, now) => {
   if (e === undefined) {
     body = '<p>No Claude Code chat in this window has reported yet. Send a prompt in a chat with the context-guard plugin.</p>'
   } else {
-    body += `<h2>${escapeHtml(path.basename(e.cwd))} <span class="muted">· ${escapeHtml(e.model || 'model unknown')}</span></h2>`
+    body += `<h2>${escapeHtml(titleOf(e) || e.model || 'model unknown')}</h2>`
     if (e.context.percent !== undefined) {
       body += row('Context', e.context.percent, `${k(e.context.tokens ?? 0)} of ${k(e.context.window)} tokens`, contextLevel(e))
     }
@@ -247,13 +240,7 @@ const detailsHtml = ({ chat: e, others, limits }, now) => {
         e.compactEnabled ? `at ${e.compactPercent}%` : 'off'
       } · handoff command <code>${escapeHtml(e.command)}</code></p>`
     }
-    if (others.length > 0) {
-      body += '<h3>Other chats in this window</h3>'
-      for (const o of others) {
-        if (o.context.percent !== undefined) body += row('Context', o.context.percent, chatLabel(o), contextLevel(o))
-      }
-    }
-    body += `<p class="muted">Last used ${escapeHtml(new Date(lastUsed(e)).toLocaleTimeString())}. Plan limits are the account's; the breakdown of what uses them is in Claude Code's /usage.</p>`
+    body += `<p class="muted">${escapeHtml(path.basename(e.cwd))} · ${escapeHtml(chatLabel(e))}</p>`
   }
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
@@ -281,12 +268,12 @@ function activate(context) {
   const items = Array.from({ length: ITEM_COUNT }, (_, i) => {
     const item = vscode.window.createStatusBarItem(`contextGuard.figure${i}`, vscode.StatusBarAlignment.Right, 100 - i / 100)
     item.name = 'Context Guard'
-    item.command = 'contextGuard.menu'
+    item.command = 'contextGuard.showDetails'
     context.subscriptions.push(item)
     return item
   })
 
-  let view = { chat: undefined, others: [], limits: [] }
+  let view = { chat: undefined, limits: [] }
   // The Claude chat tab focused last in this window: its label and when.
   let focused
   let panel
@@ -299,13 +286,6 @@ function activate(context) {
     vscode.window.setStatusBarMessage(`Copied ${command}: paste it into Claude`, 4000)
   }
 
-  // The Claude Code extension has no command that runs /usage: copy it and focus its prompt box.
-  const openUsage = async () => {
-    await vscode.env.clipboard.writeText('/usage')
-    await vscode.commands.executeCommand(CLAUDE_FOCUS).then(undefined, () => undefined)
-    vscode.window.setStatusBarMessage('Copied /usage: paste it into the Claude prompt (Cmd+V, Enter)', 5000)
-  }
-
   const showDetails = () => {
     if (panel) {
       panel.reveal()
@@ -314,19 +294,6 @@ function activate(context) {
       panel.onDidDispose(() => (panel = undefined))
     }
     panel.webview.html = detailsHtml(view, Date.now())
-  }
-
-  const menu = async () => {
-    const choice = await vscode.window.showQuickPick(
-      [
-        { label: '$(graph) Usage details', run: showDetails },
-        { label: '$(copy) Copy handoff command', description: view.chat?.command, run: copyHandoff },
-        { label: '$(pulse) Copy /usage and open Claude', run: openUsage },
-        { label: '$(comment-discussion) Open Claude', run: () => vscode.commands.executeCommand(CLAUDE_FOCUS) },
-      ],
-      { placeHolder: 'Claude Code context and usage' },
-    )
-    if (choice) await choice.run()
   }
 
   const render = () => {
@@ -376,10 +343,8 @@ function activate(context) {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('contextGuard.menu', menu),
     vscode.commands.registerCommand('contextGuard.showDetails', showDetails),
     vscode.commands.registerCommand('contextGuard.copyHandoff', copyHandoff),
-    vscode.commands.registerCommand('contextGuard.openUsage', openUsage),
     vscode.commands.registerCommand('contextGuard.refresh', render),
   )
 
