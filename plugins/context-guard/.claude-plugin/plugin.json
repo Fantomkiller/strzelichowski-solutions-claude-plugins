@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"
@@ -20,12 +20,6 @@
       "default": 60,
       "min": 1,
       "max": 95
-    },
-    "reminder_tell_model": {
-      "type": "boolean",
-      "title": "Reminder through Claude",
-      "description": "Besides the notice in the chat, ask Claude to mention the reminder at the start of its next reply (works in every surface, VS Code included)",
-      "default": false
     },
     "compact_enabled": {
       "type": "boolean",
@@ -81,7 +75,7 @@
     "status_file": {
       "type": "boolean",
       "title": "Status file for VS Code",
-      "description": "Write context fill and usage limits to ~/.claude/context-guard/sessions/ for the Context Guard VS Code extension",
+      "description": "Write each session's context fill and usage limits to ~/.claude/context-guard/sessions/ for the Context Guard VS Code extension",
       "default": true
     },
     "subagent_cap_enabled": {

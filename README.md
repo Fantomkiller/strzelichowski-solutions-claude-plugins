@@ -23,7 +23,7 @@ In VS Code you can also open this link, which goes straight to the plugin's inst
 
 From a local copy (unzipped or cloned), pass its path to `marketplace add` instead. Start a new session afterwards.
 
-Optionally, VS Code users can also install the status bar extension, which shows the same figures on VS Code's own status bar (hover for bars and reset times, click for a menu with a usage panel):
+Optionally, VS Code users can also install the status bar extension, which shows the same figures on VS Code's own status bar, each colored by its level (hover for bars and reset times, click for a menu with a usage panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
 ```
 gh release download --repo Fantomkiller/strzelichowski-solutions-claude-plugins --pattern '*.vsix'   # or take it from vscode-context-guard/ in a clone
@@ -34,14 +34,14 @@ code --install-extension context-guard-status.vsix
 
 | Feature | Where you see it |
 | --- | --- |
-| Context fill, 5-hour and weekly usage limits with time to reset, session cost | terminal: a line above the prompt and on the status line; VS Code panel (which draws no plugin elements above its prompt): a line beneath each of Claude's answers |
+| Context fill, 5-hour and weekly usage limits with time to reset, session cost; each figure green, yellow (context past the reminder, a limit past 80%) or red (context past auto-compact, a limit past 95%) | terminal: a line above the prompt and on the status line; VS Code panel (which draws no plugin elements above its prompt): a line beneath each of Claude's answers |
 | Handoff reminder once the main conversation passes **60%** of the model's context | terminal: yellow line above the prompt with a **Hide** button, plus a notification; VS Code panel: a line beneath each answer |
 | `/context-guard:handoff`: writes `~/.claude/handoffs/<repo>/<branch>.md` and prints an opener for a fresh session; never commits, pushes, stages or stashes | in the conversation |
 | Auto-compact of the main conversation at **65%**; a conversation that stays above the threshold after compacting is compacted again only after it grows 5 more points | notification, then Claude Code's own "Conversation compacted" |
 | Warning when a 5-hour or weekly limit passes **80%** | notice added to the conversation |
 | Token ceiling for subagents (default Claude Haiku 5.5, **100k**): an oversized tool result is cut so the next request stays under the ceiling; the subagent keeps working | in the subagent's tool result |
 
-Usage limits appear on a Claude subscription only; with an API key the line shows context and cost. Figures refresh after each turn.
+Usage limits appear on a Claude subscription only; with an API key the line shows context and cost. Figures refresh after each turn. Nothing the plugin posts in the conversation (notices, the line beneath answers) is sent to Claude, so it adds nothing to the context.
 
 ## What it looks like
 
@@ -80,7 +80,6 @@ Every option can be changed interactively:
 | --- | --- | --- |
 | Handoff reminder | on | yellow line above the prompt and a notification |
 | Handoff reminder threshold (%) | 60 | when the reminder shows |
-| Reminder through Claude | off | also ask Claude to mention the reminder at the start of its next reply |
 | Auto-compact | on | compact the main conversation |
 | Auto-compact threshold (%) | 65 | when it compacts |
 | Models for reminder and auto-compact | `opus` | comma-separated model id fragments; empty = every model |
@@ -88,7 +87,7 @@ Every option can be changed interactively:
 | Line beneath each answer | auto | usage line and reminder beneath Claude's answers; auto = only where no band is drawn (VS Code panel), always, off |
 | Usage status line | on | the same line on the status line under the prompt (terminal only) |
 | Usage limit warning (%) | 80 | warning when a limit reaches it; 0 = off |
-| Status file for VS Code | on | writes `~/.claude/context-guard/sessions/*.json` for the VS Code extension |
+| Status file for VS Code | on | writes one `~/.claude/context-guard/sessions/<session id>.json` per session for the VS Code extension |
 | Subagent token ceiling | on | the subagent guard |
 | Subagent token ceiling (tokens) | 100000 | the ceiling |
 | Subagent ceiling models | `haiku-5-5` | comma-separated model id fragments; empty = every model |

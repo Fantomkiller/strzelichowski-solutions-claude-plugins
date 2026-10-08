@@ -141,16 +141,67 @@ test('the status line can be switched off', { options: { usage_status: false } }
   expect(lines).toEqual([])
 })
 
-test('crossing the reminder posts a notice in the chat and a note for Claude', { options: { reminder_tell_model: true } }, async ($, on) => {
+test('crossing the reminder posts one notice in the chat and nothing the model reads', async ($, on) => {
   const engineSide = engine(on)
   await mainStep($, 'claude-opus-5-5')
   await measure($, 61)
-  const notice = engineSide.rows.find(r => r.type === 'system')
-  const note = engineSide.rows.find(r => r.type === 'user')
-  expect(notice?.text).toMatch(/Context at 61%.*context-guard:handoff/)
-  expect(note?.text).toMatch(/Start your next reply/)
   await measure($, 62)
+  await measure($, 66) // and the compaction notice
+  expect(engineSide.rows.find(r => r.type === 'system')?.text).toMatch(/Context at 61%.*context-guard:handoff/)
+  expect(engineSide.rows.filter(r => r.type !== 'system')).toEqual([])
   expect(engineSide.rows.length).toBe(2)
+})
+
+// Stands in for the host's files, home, working directory and session id.
+const host = (on: On) => {
+  const files = new Map<string, Record<string, unknown>>()
+  const session = { id: 'chat-a' }
+  on('fs.write', (_$, e) => {
+    files.set(e.path, JSON.parse(e.text) as Record<string, unknown>)
+    return { value: undefined }
+  })
+  on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/home/u' : undefined }))
+  on('session.cwd', () => ({ value: '/work/project' }))
+  on('session.id', () => ({ value: session.id }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const status = (id: string) => files.get(`/home/u/.claude/context-guard/sessions/${id}.json`)
+  return { files, session, status }
+}
+
+test('each session writes its own status file, named by its id', async ($, on) => {
+  engine(on)
+  const { files, session, status } = host(on)
+  await mainStep($, 'claude-opus-5-5')
+  await measure($, 20)
+  session.id = 'chat-b' // a /clear: the process goes on under a new id
+  await measure($, 3)
+  expect(files.size).toBe(2)
+  expect(status('chat-a')).toMatchObject({ sessionId: 'chat-a', cwd: '/work/project', context: { percent: 20 } })
+  expect(status('chat-b')).toMatchObject({ sessionId: 'chat-b', context: { percent: 3 } })
+})
+
+test('a prompt sent marks the chat as the one in use', async ($, on) => {
+  engine(on)
+  const { status } = host(on)
+  await measure($, 20)
+  const before = status('chat-a')?.activeAt as number
+  const start = Date.now()
+  while (Date.now() === start) {
+    // wait for the clock to move on
+  }
+  await $.prompt.submit({ text: 'next question', wait: false, origin: { kind: 'composer' } })
+  expect(status('chat-a')?.activeAt as number).toBeGreaterThan(before)
+  expect(status('chat-a')).toMatchObject({ context: { percent: 20 } })
+})
+
+test('an ended session marks its file ended', async ($, on) => {
+  engine(on)
+  const { status } = host(on)
+  await measure($, 20)
+  expect(status('chat-a')?.endedAt).toBeUndefined()
+  await $.session.end({ reason: 'clear', sessionId: 'chat-a', resume: { id: 'chat-a' } })
+  expect(status('chat-a')?.endedAt).toBeGreaterThan(0)
 })
 
 test('a usage limit past the warning level posts one notice', async ($, on) => {
@@ -173,10 +224,34 @@ test('the band above the prompt always carries the usage line, on every surface'
   })
   for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
-    expect((await ui.find({ type: 'Text', text: /^ctx 30% \| 5h 63%/ }))?.text).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^ctx 30%$/ }))?.text).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^ \| 5h 63%/ }))?.text).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /handoff/ })).toBeUndefined()
     await ui.unmount()
   }
+})
+
+test('each figure of the usage line is colored by its level', async ($, on) => {
+  engine(on)
+  await mainStep($, 'claude-opus-5-5')
+  await $.session.measure({
+    context: { percent: 61, tokens: 610_000, window: WINDOW },
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 20 },
+      { kind: 'seven_day', percentUsed: 85 },
+      { kind: 'spend_limit', percentUsed: 97 },
+    ],
+    cost: { usd: 1 },
+    changed: ['context', 'rateLimits', 'cost'],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const colorOf = async (text: RegExp) => (await ui.find({ type: 'Text', text }))?.props
+  expect(await colorOf(/^ctx 61%$/)).toMatchObject({ color: 'yellow' })
+  expect(await colorOf(/5h 20%/)).toMatchObject({ color: 'green' })
+  expect(await colorOf(/week 85%/)).toMatchObject({ color: 'yellow' })
+  expect(await colorOf(/spend 97%/)).toMatchObject({ color: 'red' })
+  expect(await colorOf(/\$1\.00/)).toMatchObject({ dimColor: true })
+  await ui.unmount()
 })
 
 test('the reminder is announced once per crossing, even across reloads of the state', async ($, on) => {

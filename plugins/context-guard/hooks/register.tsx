@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionCost, SessionRateLimit } from 'claude-code'
 
-import type { Fill } from '../types'
+import type { Fill, Level, UsagePart } from '../types'
 import { createSubagentCap } from './subagent-cap'
 
 const fill = atom({ plugin: 'context-guard', key: 'fill' } as const, null)
@@ -27,18 +27,29 @@ type Usage = {
   cost?: SessionCost | undefined
 }
 
-// What the Context Guard VS Code extension reads: one file per working directory.
-type StatusEntry = Usage & {
-  cwd: string
+type Session = {
+  sessionId: string
   model: string
   isWatched: boolean
-  reminderEnabled: boolean
-  reminderPercent: number
-  compactEnabled: boolean
-  compactPercent: number
-  command: string
-  updatedAt: number
+  // When the person last used this chat (a prompt sent, a turn ended): tells the
+  // chat in front of them apart from the others in the same folder.
+  activeAt: number
+  // Set when the session ended (exit, /clear, resume): the VS Code extension drops it.
+  endedAt?: number
 }
+
+// What the Context Guard VS Code extension reads: one file per session, so each chat
+// and each VS Code window shows its own figures.
+type StatusEntry = Usage &
+  Session & {
+    cwd: string
+    reminderEnabled: boolean
+    reminderPercent: number
+    compactEnabled: boolean
+    compactPercent: number
+    command: string
+    updatedAt: number
+  }
 
 // Time left until an ISO timestamp, as 3d4h / 2h13m / 9m; '' when unknown or past.
 const until = (iso: string | undefined, now: number) => {
@@ -51,28 +62,48 @@ const until = (iso: string | undefined, now: number) => {
 
 const k = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}k`)
 
-// Context fill, usage limits and session cost as one line.
-const usageText = (usage: Usage) => {
+// A usage limit at or past these shows yellow, then red; the context goes yellow at the
+// reminder threshold and red at the auto-compact one.
+const LIMIT_WARN_PERCENT = 80
+const LIMIT_DANGER_PERCENT = 95
+const LEVEL_COLORS: Record<Level, string> = { ok: 'green', warn: 'yellow', danger: 'red' }
+
+const levelOf = (percent: number, warn: number, danger: number): Level =>
+  percent >= danger ? 'danger' : percent >= warn ? 'warn' : 'ok'
+
+// Context fill, usage limits and session cost, each figure with its level.
+const usageParts = (usage: Usage, settings: Settings): UsagePart[] => {
   const now = Date.now()
-  const parts: string[] = []
-  if (usage.context.percent !== undefined) parts.push(`ctx ${usage.context.percent}%`)
+  const parts: UsagePart[] = []
+  if (usage.context.percent !== undefined) {
+    const level = levelOf(usage.context.percent, settings.reminderPercent, settings.compactPercent)
+    parts.push({ text: `ctx ${usage.context.percent}%`, level })
+  }
   for (const limit of usage.rateLimits) {
     const left = until(limit.resetsAt, now)
-    parts.push(`${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` (reset ${left})` : ''}`)
+    parts.push({
+      text: `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` (reset ${left})` : ''}`,
+      level: levelOf(limit.percentUsed, LIMIT_WARN_PERCENT, LIMIT_DANGER_PERCENT),
+    })
   }
-  if (usage.cost !== undefined) parts.push(`$${usage.cost.usd.toFixed(2)}`)
-  return parts.join(' | ')
+  if (usage.cost !== undefined) parts.push({ text: `$${usage.cost.usd.toFixed(2)}`, level: null })
+  return parts
 }
 
-const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage, model: string, isWatched: boolean) => {
+const usageText = (parts: readonly UsagePart[]) => parts.map(p => p.text).join(' | ')
+
+// The session's status file; its id is the current one unless given (an ended session's).
+const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage, session: Omit<Session, 'sessionId'> & { sessionId?: string }) => {
+  if (!settings.statusFile) return
   const home = await $.env.get('HOME')
   if (home === undefined) return
-  const cwd = await $.session.cwd()
   const entry: StatusEntry = {
-    ...usage,
-    cwd,
-    model,
-    isWatched,
+    context: usage.context,
+    rateLimits: usage.rateLimits,
+    cost: usage.cost,
+    ...session,
+    sessionId: session.sessionId ?? (await $.session.id()),
+    cwd: await $.session.cwd(),
     reminderEnabled: settings.reminderEnabled,
     reminderPercent: settings.reminderPercent,
     compactEnabled: settings.compactEnabled,
@@ -80,26 +111,21 @@ const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage,
     command: `/${$.plugin.name}:handoff`,
     updatedAt: Date.now(),
   }
-  const name = cwd.replace(/[^A-Za-z0-9._-]+/g, '_')
+  const name = entry.sessionId.replace(/[^A-Za-z0-9._-]+/g, '_')
   await $.fs.write(`${home}/.claude/context-guard/sessions/${name}.json`, JSON.stringify(entry, null, 2))
 }
 
-// A row in the conversation itself: the one place every surface (terminal, VS Code,
-// desktop) shows. A notice the model never reads, and optionally a note it does,
-// so the next reply says it too.
-const tell = async ($: EngineInterface, notice: string, modelNote: string | undefined) => {
+// A row in the conversation itself, the one place every surface (terminal, VS Code,
+// desktop) shows: a notice the model never reads, so it adds nothing to the context.
+const tell = async ($: EngineInterface, notice: string) => {
   await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: notice }] } }).catch(() => undefined)
-  if (modelNote !== undefined) {
-    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: modelNote }] } }).catch(() => undefined)
-  }
 }
 
-// Status line and status file from one reading of the session's usage.
-const report = async ($: EngineInterface, settings: Settings, usage: Usage, model: string, isWatched: boolean) => {
-  const line = usageText(usage)
-  if (settings.usageStatus) $.ui.status(line || undefined)
-  if (settings.usageBand) await update($, usageLine, () => line || null)
-  if (settings.statusFile) await writeStatus($, settings, usage, model, isWatched).catch(() => undefined)
+// Status line and band from one reading of the session's usage.
+const report = async ($: EngineInterface, settings: Settings, usage: Usage) => {
+  const parts = usageParts(usage, settings)
+  if (settings.usageStatus) $.ui.status(usageText(parts) || undefined)
+  if (settings.usageBand) await update($, usageLine, () => (parts.length > 0 ? parts : null))
 }
 
 export const register: Register = (on, options) => {
@@ -114,7 +140,6 @@ export const register: Register = (on, options) => {
     compactEnabled: options.compact_enabled !== false,
     compactPercent: Number(options.compact_percent ?? 65),
   }
-  const tellModel = options.reminder_tell_model === true
   // Text beneath each answer: the one plugin output the VS Code panel shows.
   // auto = only on surfaces that draw no band above the prompt.
   const answerFooter = String(options.answer_footer ?? 'auto')
@@ -139,14 +164,38 @@ export const register: Register = (on, options) => {
   // Usage-limit windows already warned about, by kind and reset time.
   const warnedLimits = new Set<string>()
 
+  // The session's last reading and last use, for its status file.
+  let lastUsage: Usage | null = null
+  let activeAt = Date.now()
+  const sessionNow = () => ({ model: mainModel, isWatched: appliesTo(mainModel), activeAt })
+
   on('session.start', async ($, e, next) => {
     surface = e.surface
+    activeAt = Date.now()
     const r = await next(e)
     if (!settings.usageStatus && !settings.usageBand && !settings.statusFile) return r
     const usage = await $.session.usage()
-    await report($, settings, usage, mainModel, appliesTo(mainModel))
+    lastUsage = usage
+    await report($, settings, usage)
+    await writeStatus($, settings, usage, sessionNow()).catch(() => undefined)
     return r
   }).catch(($, e, next) => next(e)) // a failed first reading must not hold the session up
+
+  // A prompt sent makes this the chat in front of the person: its file says so at once,
+  // before the turn's figures arrive.
+  on('prompt.submit', async ($, e, next) => {
+    activeAt = Date.now()
+    if (lastUsage !== null) await writeStatus($, settings, lastUsage, sessionNow()).catch(() => undefined)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Exit, /clear or resume: the file is marked ended and the VS Code extension drops it.
+  // After a /clear the process goes on under a new id, whose file the next reading writes.
+  on('session.end', async ($, e, next) => {
+    if (lastUsage !== null) await writeStatus($, settings, lastUsage, { ...sessionNow(), sessionId: e.sessionId, endedAt: Date.now() }).catch(() => undefined)
+    lastUsage = null
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   on('turn.step', async function* ($, e, next) {
     if (e.agentId === undefined) {
@@ -196,7 +245,7 @@ export const register: Register = (on, options) => {
       const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
       parts.push(`⚠ Context ${percent}%: run /${$.plugin.name}:handoff, then /clear.${fallback}`)
     }
-    const line = usageText(usage)
+    const line = usageText(usageParts(usage, settings))
     if (line) parts.push(line)
     if (parts.length === 0) return r
 
@@ -208,7 +257,11 @@ export const register: Register = (on, options) => {
   // Fires after each main-thread turn: the only point the fill is read and acted on.
   on('session.measure', async ($, e, next) => {
     const r = await next(e)
-    await report($, settings, e, mainModel, appliesTo(mainModel))
+    const usage: Usage = { context: e.context, rateLimits: e.rateLimits, cost: e.cost }
+    lastUsage = usage
+    activeAt = Date.now()
+    await report($, settings, usage)
+    await writeStatus($, settings, usage, sessionNow()).catch(() => undefined)
 
     for (const limit of e.rateLimits) {
       const key = `${limit.kind}@${limit.resetsAt ?? ''}`
@@ -216,7 +269,7 @@ export const register: Register = (on, options) => {
         warnedLimits.add(key)
         const left = until(limit.resetsAt, Date.now())
         const label = LIMIT_LABELS[limit.kind] ?? limit.kind
-        await tell($, `⚠ [context-guard] ${label} usage limit at ${limit.percentUsed}%${left ? `, resets in ${left}` : ''}.`, undefined)
+        await tell($, `⚠ [context-guard] ${label} usage limit at ${limit.percentUsed}%${left ? `, resets in ${left}` : ''}.`)
       }
     }
 
@@ -246,19 +299,13 @@ export const register: Register = (on, options) => {
       const command = `/${$.plugin.name}:handoff`
       const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
       $.ui.toast(`Context ${percent}%: time for ${command}`)
-      await tell(
-        $,
-        `⚠ [context-guard] Context at ${percent}% (${k(now.tokens)}/${k(now.window)}): run ${command}, then /clear.${fallback}`,
-        tellModel
-          ? `[context-guard] The context window is at ${percent}%. Start your next reply with one short line telling the user so and suggesting ${command} followed by /clear; then carry on with their request.`
-          : undefined,
-      )
+      await tell($, `⚠ [context-guard] Context at ${percent}% (${k(now.tokens)}/${k(now.window)}): run ${command}, then /clear.${fallback}`)
     }
 
     if (settings.compactEnabled && percent >= Math.max(settings.compactPercent, compactFloor) && !isCompacting) {
       isCompacting = true
       $.ui.toast(`Context ${percent}% passed ${settings.compactPercent}%: compacting`)
-      await tell($, `⚠ [context-guard] Context at ${percent}% passed ${settings.compactPercent}%: compacting the conversation.`, undefined)
+      await tell($, `⚠ [context-guard] Context at ${percent}% passed ${settings.compactPercent}%: compacting the conversation.`)
       // Between turns, as /compact runs; rejected while a turn runs, so the next measure retries.
       try {
         // The plugin's own session.compact hook is skipped for its own call: mark it here.
@@ -299,7 +346,16 @@ export const register: Register = (on, options) => {
             <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
           </Box>
         ) : null}
-        {line !== null ? <Text dimColor>{line}</Text> : null}
+        {line !== null ? (
+          <Box>
+            {line.map((part, i) => (
+              <Text key={`part${i}`} {...(part.level === null ? { dimColor: true } : { color: LEVEL_COLORS[part.level] })}>
+                {i > 0 ? ' | ' : ''}
+                {part.text}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     )
   })
