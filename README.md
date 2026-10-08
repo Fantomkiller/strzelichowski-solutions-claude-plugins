@@ -31,7 +31,7 @@ From a local copy (unzipped or cloned), pass its path to `marketplace add` inste
 
 It sets `modelSettings.claude-haiku-5-5.autoCompactWindow` to 128000 in `~/.claude/settings.json`, keeps everything else, and leaves a backup next to it (`settings.json.bak-context-guard`). Each session start says so in the chat while it is not set. From a shell: `claude -p /context-guard-setup`. Details in [Subagent compaction](#subagent-compaction).
 
-**3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times; a click opens the same in a panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
+**3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored on the same green-to-red scale (hover for bars, reset times and when a limit runs out at the current pace; a click opens the same in a panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
 1. Download [context-guard-status.vsix](https://github.com/Fantomkiller/strzelichowski-solutions-claude-plugins/releases/latest/download/context-guard-status.vsix) from the latest release.
 2. In VS Code: Extensions view, `...` menu, **Install from VSIX...**, pick the file. (Or from a shell: `code --install-extension context-guard-status.vsix`.)
@@ -41,7 +41,7 @@ It sets `modelSettings.claude-haiku-5-5.autoCompactWindow` to 128000 in `~/.clau
 
 | Feature | Where you see it |
 | --- | --- |
-| Context fill, 5-hour and weekly usage limits with time to reset; each figure green, yellow (context past the reminder, a limit past 80%) or red (context past auto-compact, a limit past 95%) | terminal: a line above the prompt and on the status line; VS Code: the status bar extension (the Claude Code panel draws no plugin elements) |
+| Context fill, 5-hour and weekly usage limits with time to reset; each figure colored on one scale from green through yellow and orange to red: the context by its fill (warming from half the reminder threshold, red at auto-compact), a limit by the worse of its usage (warming from 30%, red at 95%) and its pace (the usage at reset if it goes on as it has; when that passes 100% the line says when the limit runs out) | terminal: a line above the prompt and on the status line; VS Code: the status bar extension (the Claude Code panel draws no plugin elements) |
 | Handoff reminder once the main conversation passes **60%** of the model's context | terminal: yellow line above the prompt with a **Hide** button, plus a notification; VS Code: the status bar extension's warning and notification |
 | `/context-guard:handoff`: writes `~/.claude/handoffs/<repo>/<branch>.md` and prints an opener for a fresh session; never commits, pushes, stages or stashes | in the conversation |
 | Auto-compact of the main conversation at **65%**; a conversation that stays above the threshold after compacting is compacted again only after it grows 5 more points | notification, then Claude Code's own "Conversation compacted" |

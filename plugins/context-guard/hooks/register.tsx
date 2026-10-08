@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
-import type { Fill, Level, UsagePart } from '../types'
+import type { Fill, UsagePart } from '../types'
+import { colorOf, contextScore, limitScore } from './scale'
 import { isConfigured, planSetup, windowFor } from './setup'
 import { createSubagentCap } from './subagent-cap'
 import type { SubagentCap } from './subagent-cap'
@@ -63,28 +64,23 @@ const until = (iso: string | undefined, now: number) => {
 
 const k = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}k`)
 
-// A usage limit at or past these shows yellow, then red; the context goes yellow at the
-// reminder threshold and red at the auto-compact one.
-const LIMIT_WARN_PERCENT = 80
-const LIMIT_DANGER_PERCENT = 95
-const LEVEL_COLORS: Record<Level, string> = { ok: 'green', warn: 'yellow', danger: 'red' }
-
-const levelOf = (percent: number, warn: number, danger: number): Level =>
-  percent >= danger ? 'danger' : percent >= warn ? 'warn' : 'ok'
-
-// Context fill and usage limits, each figure with its level.
+// Context fill and usage limits, each figure colored on one scale (green, yellow, orange,
+// red); a limit whose pace reaches it before its reset says when.
 const usageParts = (usage: Usage, settings: Settings): UsagePart[] => {
   const now = Date.now()
   const parts: UsagePart[] = []
   if (usage.context.percent !== undefined) {
-    const level = levelOf(usage.context.percent, settings.reminderPercent, settings.compactPercent)
-    parts.push({ text: `ctx ${usage.context.percent}%`, level })
+    const score = contextScore(usage.context.percent, settings.reminderPercent, settings.compactPercent)
+    parts.push({ text: `ctx ${usage.context.percent}%`, color: colorOf(score) })
   }
   for (const limit of usage.rateLimits) {
     const left = until(limit.resetsAt, now)
+    const { score, limitInMs } = limitScore(limit.kind, limit.percentUsed, limit.resetsAt, now)
+    const soon = limitInMs !== undefined ? until(new Date(now + limitInMs).toISOString(), now) : ''
+    const notes = [left ? `reset ${left}` : '', soon ? `limit in ~${soon}` : ''].filter(n => n !== '').join(', ')
     parts.push({
-      text: `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` (reset ${left})` : ''}`,
-      level: levelOf(limit.percentUsed, LIMIT_WARN_PERCENT, LIMIT_DANGER_PERCENT),
+      text: `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${notes ? ` (${notes})` : ''}`,
+      color: colorOf(score),
     })
   }
   return parts
@@ -386,7 +382,7 @@ export const register: Register = (on, options) => {
         {line !== null ? (
           <Box>
             {line.map((part, i) => (
-              <Text key={`part${i}`} color={LEVEL_COLORS[part.level]}>
+              <Text key={`part${i}`} color={part.color}>
                 {i > 0 ? ' | ' : ''}
                 {part.text}
               </Text>

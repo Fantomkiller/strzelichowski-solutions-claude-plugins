@@ -2,6 +2,8 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { colorOf, contextScore, limitScore } from '../hooks/scale'
+
 const WINDOW = 1_000_000
 
 const BAND = {
@@ -231,7 +233,7 @@ test('the band above the prompt always carries the usage line, on every surface'
   }
 })
 
-test('each figure of the usage line is colored by its level', async ($, on) => {
+test('each figure of the usage line is colored on the green-to-red scale', async ($, on) => {
   engine(on)
   await mainStep($, 'claude-opus-5-5')
   await $.session.measure({
@@ -245,13 +247,26 @@ test('each figure of the usage line is colored by its level', async ($, on) => {
     changed: ['context', 'rateLimits', 'cost'],
   })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  const colorOf = async (text: RegExp) => (await ui.find({ type: 'Text', text }))?.props
-  expect(await colorOf(/^ctx 61%$/)).toMatchObject({ color: 'yellow' })
-  expect(await colorOf(/5h 20%/)).toMatchObject({ color: 'green' })
-  expect(await colorOf(/week 85%/)).toMatchObject({ color: 'yellow' })
-  expect(await colorOf(/spend 97%/)).toMatchObject({ color: 'red' })
+  const colorOfText = async (text: RegExp) => ((await ui.find({ type: 'Text', text }))?.props as { color?: string } | undefined)?.color
+  expect(await colorOfText(/^ctx 61%$/)).toBe(colorOf(contextScore(61, 60, 65)))
+  expect(await colorOfText(/5h 20%/)).toBe(colorOf(0))
+  expect(await colorOfText(/week 85%/)).toBe(colorOf(limitScore('seven_day', 85, undefined, 0).score))
+  expect(await colorOfText(/spend 97%/)).toBe(colorOf(1))
   expect(await ui.find({ type: 'Text', text: /\$/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test('a limit used faster than its window says when it runs out', async ($, on) => {
+  engine(on)
+  const lines: (string | undefined)[] = []
+  on('ui.status', (_$, e) => {
+    lines.push(e.text)
+    return { value: undefined }
+  })
+  // 54% of the 5-hour limit with 3h33m left: 1h27m in, about 1h14m to go at this pace.
+  const resetsAt = new Date(Date.now() + (3 * 60 + 33) * 60_000).toISOString()
+  await $.session.measure({ context: { percent: 10, tokens: 1, window: WINDOW }, rateLimits: [{ kind: 'five_hour', percentUsed: 54, resetsAt }], changed: ['rateLimits'] })
+  expect(lines.at(-1)).toMatch(/5h 54% \(reset 3h3\dm, limit in ~1h1\dm\)/)
 })
 
 test('the reminder is announced once per crossing, even across reloads of the state', async ($, on) => {

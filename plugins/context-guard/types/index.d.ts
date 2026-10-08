@@ -1,8 +1,7 @@
 export type Fill = { percent: number; tokens: number; window: number }
 
-export type Level = 'ok' | 'warn' | 'danger'
-// One figure of the usage line.
-export type UsagePart = { text: string; level: Level }
+// One figure of the usage line and its color on the green-to-red scale.
+export type UsagePart = { text: string; color: string }
 
 declare module 'claude-code' {
   interface PluginState {

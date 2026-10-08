@@ -1,6 +1,6 @@
 // Context Guard status: shows what the context-guard Claude Code plugin writes to
 // ~/.claude/context-guard/sessions/*.json (one file per session) on the VS Code
-// status bar, for the chat of this window used last: each figure colored by its level,
+// status bar, for the chat of this window used last: each figure colored green to red,
 // with a detailed hover (a click opens the same in a panel), and a reminder to hand off
 // once the context passes the plugin's reminder threshold.
 const vscode = require('vscode')
@@ -12,21 +12,49 @@ const DIR = path.join(os.homedir(), '.claude', 'context-guard', 'sessions')
 const POLL_MS = 3000
 // Entries older than this are from sessions long gone.
 const STALE_MS = 12 * 3_600_000
-// A usage limit at or past these shows as a warning, then as danger.
-const LIMIT_WARN_PERCENT = 80
-const LIMIT_DANGER_PERCENT = 95
-// Each figure has a level of its own: ok, warn (the context past the reminder, a limit
-// past 80%), danger (the context past auto-compact, a limit past 95%).
-const LEVEL_HEX = { ok: '#3fb950', warn: '#d29922', danger: '#f85149' }
-const LEVEL_THEME = { ok: 'charts.green', warn: 'charts.yellow', danger: 'charts.red' }
-const LEVEL_BACKGROUND = { warn: 'statusBarItem.warningBackground', danger: 'statusBarItem.errorBackground' }
-const LEVEL_RANK = { ok: 0, warn: 1, danger: 2 }
-const limitLevel = percent => (percent >= LIMIT_DANGER_PERCENT ? 'danger' : percent >= LIMIT_WARN_PERCENT ? 'warn' : 'ok')
-const contextLevel = e => {
+// One color scale for every figure: a score from 0 (green) to 1 (red), through yellow and
+// orange. A copy of the plugin's plugins/context-guard/hooks/scale.ts: keep the two alike.
+// A limit's own usage warms from 30% and is red at 95%; its pace (the usage at reset if it
+// goes on as it has) warms past 70% and is deepest at 150%, never red on pace alone, read
+// once a tenth of the window has passed. The context warms from half the reminder
+// threshold and is red at the compaction one.
+const WINDOW_MS = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 }
+const clamp01 = x => Math.max(0, Math.min(1, x))
+const contextScore = e => {
   const percent = e.context.percent
-  if (percent === undefined) return 'ok'
-  return percent >= (e.compactPercent ?? 65) ? 'danger' : percent >= (e.reminderPercent ?? 60) ? 'warn' : 'ok'
+  if (percent === undefined) return 0
+  const from = (e.reminderPercent ?? 60) / 2
+  return clamp01((percent - from) / Math.max(1, (e.compactPercent ?? 65) - from))
 }
+// { score, limitInMs }: limitInMs, at the pace so far, when the limit comes before its reset.
+const limitScore = (limit, now) => {
+  const usage = clamp01((limit.percentUsed - 30) / 65)
+  const window = WINDOW_MS[limit.kind]
+  const left = limit.resetsAt ? Date.parse(limit.resetsAt) - now : NaN
+  if (window === undefined || !(left > 0) || left >= window) return { score: usage }
+  const elapsed = window - left
+  if (elapsed < window * 0.1 || limit.percentUsed <= 0) return { score: usage }
+  const projected = (limit.percentUsed * window) / elapsed
+  const pace = 0.9 * clamp01((projected - 70) / 80)
+  const limitInMs = limit.percentUsed < 100 && projected > 100 ? ((100 - limit.percentUsed) * elapsed) / limit.percentUsed : undefined
+  return { score: Math.max(usage, pace), limitInMs }
+}
+// Hue 120 (green) to 0 (red), bright enough on dark and light backgrounds.
+const colorOf = score => {
+  const h = 120 * (1 - clamp01(score))
+  const s = 0.75
+  const l = 0.48
+  const f = n => {
+    const k = (n + h / 30) % 12
+    const c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(c * 255).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+// From here a figure is past its line (the context past auto-compact, a limit at 95%): a red background.
+const SCORE_ALARM = 1
+// From here the first item carries a warning icon.
+const SCORE_WARN = 0.6
 // One status bar item per figure, so each carries its own color: context and up to three limits.
 const ITEM_COUNT = 4
 const LIMIT_LABELS = { five_hour: '5-hour', seven_day: 'Weekly', spend_limit: 'Spend' }
@@ -61,8 +89,8 @@ const bar = (percent, cells = 12) => {
 
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
 
-// Hover text in a level's color (the hover keeps a span's color style).
-const colored = (level, html) => `<span style="color:${LEVEL_HEX[level]};">${html}</span>`
+// Hover text in a score's color (the hover keeps a span's color style).
+const colored = (score, html) => `<span style="color:${colorOf(score)};">${html}</span>`
 
 // Live sessions, freshest first. Files of ended sessions (exit, /clear), stale ones and
 // the old per-folder files without a session id are removed.
@@ -181,17 +209,18 @@ const tooltipFor = ({ chat: e, limits }, now) => {
   t.supportHtml = true
   t.appendMarkdown(`**Claude Code** · ${e ? titleOf(e) || e.model || 'model unknown' : 'no reading for this chat yet'}\n\n`)
   if (e?.context.percent !== undefined) {
-    const level = contextLevel(e)
     t.appendMarkdown(
-      `${colored(level, `${bar(e.context.percent)} <b>Context ${e.context.percent}%</b>`)} · ${k(e.context.tokens ?? 0)} / ${k(e.context.window)}\n\n`,
+      `${colored(contextScore(e), `${bar(e.context.percent)} <b>Context ${e.context.percent}%</b>`)} · ${k(e.context.tokens ?? 0)} / ${k(e.context.window)}\n\n`,
     )
   }
   for (const limit of limits) {
     const left = until(limit.resetsAt, now)
     const at = resetAt(limit.resetsAt, now)
     const label = `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%`
+    const { score, limitInMs } = limitScore(limit, now)
+    const soon = limitInMs !== undefined ? until(new Date(now + limitInMs).toISOString(), now) : ''
     t.appendMarkdown(
-      `${colored(limitLevel(limit.percentUsed), `${bar(limit.percentUsed)} <b>${label}</b>`)}${at ? ` · resets ${at} (in ${left})` : ''}\n\n`,
+      `${colored(score, `${bar(limit.percentUsed)} <b>${label}</b>`)}${at ? ` · resets ${at} (in ${left})` : ''}${soon ? ` · ${colored(score, `limit in ~${soon} at this pace`)}` : ''}\n\n`,
     )
   }
   if (limits.length === 0) t.appendMarkdown(`_No plan limits reported (API key or not yet measured)_\n\n`)
@@ -210,10 +239,10 @@ const tooltipFor = ({ chat: e, limits }, now) => {
 
 // The same as the hover, in a panel that stays open and refreshes.
 const detailsHtml = ({ chat: e, limits }, now) => {
-  const row = (label, percent, sub, level) => `
+  const row = (label, percent, sub, score) => `
     <div class="row">
-      <div class="label"><span>${escapeHtml(label)}</span><span class="${level}">${percent}%</span></div>
-      <div class="track"><div class="fill ${level}" style="width:${Math.min(100, percent)}%"></div></div>
+      <div class="label"><span>${escapeHtml(label)}</span><span style="color:${colorOf(score)}">${percent}%</span></div>
+      <div class="track"><div class="fill" style="width:${Math.min(100, percent)}%;background:${colorOf(score)}"></div></div>
       ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
     </div>`
   let body = ''
@@ -222,12 +251,14 @@ const detailsHtml = ({ chat: e, limits }, now) => {
   } else {
     body += `<h2>${escapeHtml(titleOf(e) || e.model || 'model unknown')}</h2>`
     if (e.context.percent !== undefined) {
-      body += row('Context', e.context.percent, `${k(e.context.tokens ?? 0)} of ${k(e.context.window)} tokens`, contextLevel(e))
+      body += row('Context', e.context.percent, `${k(e.context.tokens ?? 0)} of ${k(e.context.window)} tokens`, contextScore(e))
     }
   }
   for (const limit of limits) {
     const at = resetAt(limit.resetsAt, now)
-    body += row(LIMIT_LABELS[limit.kind] ?? limit.kind, limit.percentUsed, at ? `Resets ${at} (in ${until(limit.resetsAt, now)})` : '', limitLevel(limit.percentUsed))
+    const { score, limitInMs } = limitScore(limit, now)
+    const soon = limitInMs !== undefined ? `; limit in ~${until(new Date(now + limitInMs).toISOString(), now)} at this pace` : ''
+    body += row(LIMIT_LABELS[limit.kind] ?? limit.kind, limit.percentUsed, at ? `Resets ${at} (in ${until(limit.resetsAt, now)})${soon}` : '', score)
   }
   if (limits.length === 0) body += '<p class="muted">No plan limits reported (API key, or not measured yet).</p>'
   if (e !== undefined) {
@@ -247,12 +278,6 @@ const detailsHtml = ({ chat: e, limits }, now) => {
   .label { display: flex; justify-content: space-between; font-weight: 600; }
   .track { height: 8px; border-radius: 4px; background: var(--vscode-editorWidget-border, #444); margin-top: 6px; overflow: hidden; }
   .fill { height: 100%; }
-  .fill.ok { background: var(--vscode-charts-green, #3fb950); }
-  .fill.warn { background: var(--vscode-charts-yellow, #d29922); }
-  .fill.danger { background: var(--vscode-charts-red, #f85149); }
-  .label .ok { color: var(--vscode-charts-green, #3fb950); }
-  .label .warn { color: var(--vscode-charts-yellow, #d29922); }
-  .label .danger { color: var(--vscode-charts-red, #f85149); }
   .sub { color: var(--vscode-descriptionForeground); font-size: 0.9em; margin-top: 4px; }
   code { font-family: var(--vscode-editor-font-family); }
 </style></head><body>${body}</body></html>`
@@ -303,24 +328,24 @@ function activate(context) {
     const e = view.chat
     const figures = []
     // No chat in this window yet: the account's limits alone, never another project's context.
-    if (e?.context.percent !== undefined) figures.push({ text: `ctx ${e.context.percent}%`, level: contextLevel(e) })
+    if (e?.context.percent !== undefined) figures.push({ text: `ctx ${e.context.percent}%`, score: contextScore(e) })
     for (const limit of view.limits) {
       const left = until(limit.resetsAt, now)
-      figures.push({ text: `${LIMIT_SHORT[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` ${left}` : ''}`, level: limitLevel(limit.percentUsed) })
+      figures.push({ text: `${LIMIT_SHORT[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` ${left}` : ''}`, score: limitScore(limit, now).score })
     }
 
     const due = e !== undefined && isReminderDue(e)
-    const worst = figures.reduce((w, f) => (LEVEL_RANK[f.level] > LEVEL_RANK[w] ? f.level : w), 'ok')
+    const worst = Math.max(0, ...figures.map(f => f.score))
     const tooltip = tooltipFor(view, now)
     items.forEach((item, i) => {
       const figure = figures[i]
       if (figure === undefined) return item.hide()
-      const icon = i === 0 ? `${worst === 'ok' ? '$(sparkle)' : '$(warning)'} ` : ''
+      const icon = i === 0 ? `${worst >= SCORE_WARN ? '$(warning)' : '$(sparkle)'} ` : ''
       item.text = `${icon}${figure.text}`
-      // A warning or danger figure gets the theme's own background; an ok one, green text.
-      const background = LEVEL_BACKGROUND[figure.level]
-      item.backgroundColor = background ? new vscode.ThemeColor(background) : undefined
-      item.color = background ? undefined : new vscode.ThemeColor(LEVEL_THEME[figure.level])
+      // Its color on the scale; past its line, the theme's error background instead.
+      const isAlarm = figure.score >= SCORE_ALARM
+      item.backgroundColor = isAlarm ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined
+      item.color = isAlarm ? undefined : colorOf(figure.score)
       item.tooltip = tooltip
       item.show()
     })
