@@ -53,7 +53,7 @@ Usage limits appear on a Claude subscription only; with an API key the line show
 
 ## What it looks like
 
-Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). The Claude Code panel in VS Code does not draw plugin elements around its prompt box; there the status bar extension shows the same figures and the reminder.
+The terminal captures come from a real session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation); the VS Code one from the extension at work. The Claude Code panel in VS Code does not draw plugin elements around its prompt box; there the status bar extension shows the same figures and the reminder.
 
 **Usage line** above the prompt (and, in the terminal, on the status line):
 
@@ -72,6 +72,10 @@ Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, th
 **`/context-guard:handoff`** writes the handoff file ([example](docs/examples/handoff-PFX-42-demo.md)) and prints the opener for a fresh session:
 
 ![Handoff skill](docs/screens/06-handoff-skill.png)
+
+**VS Code status bar extension**: context and both usage limits of the chat in front of you, each on the green-to-red scale. Here the 5-hour limit is at 58% with 3h28m to its reset, a pace that runs it out in about an hour, so it is red-orange and the hover says when; a click opens the same view in a panel:
+
+![VS Code status bar and hover](docs/screens/07-vscode-status-bar.png)
 
 ## Settings
 
