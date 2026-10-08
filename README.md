@@ -34,8 +34,8 @@ code --install-extension context-guard-status.vsix
 
 | Feature | Where you see it |
 | --- | --- |
-| Context fill, 5-hour and weekly usage limits with time to reset, session cost | a line above the prompt (terminal and the Claude Code panel in VS Code); in the terminal also on the status line under the prompt |
-| Handoff reminder once the main conversation passes **60%** of the model's context | yellow line above the prompt with a **Hide** button, plus a notification |
+| Context fill, 5-hour and weekly usage limits with time to reset, session cost | terminal: a line above the prompt and on the status line; VS Code panel (which draws no plugin elements above its prompt): a line beneath each of Claude's answers |
+| Handoff reminder once the main conversation passes **60%** of the model's context | terminal: yellow line above the prompt with a **Hide** button, plus a notification; VS Code panel: a line beneath each answer |
 | `/context-guard:handoff`: writes `~/.claude/handoffs/<repo>/<branch>.md` and prints an opener for a fresh session; never commits, pushes, stages or stashes | in the conversation |
 | Auto-compact of the main conversation at **65%**; a conversation that stays above the threshold after compacting is compacted again only after it grows 5 more points | notification, then Claude Code's own "Conversation compacted" |
 | Warning when a 5-hour or weekly limit passes **80%** | notice added to the conversation |
@@ -45,7 +45,7 @@ Usage limits appear on a Claude subscription only; with an API key the line show
 
 ## What it looks like
 
-Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). The Claude Code panel in VS Code shows the same line above its prompt box.
+Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). In the Claude Code panel in VS Code, which does not draw plugin elements around its prompt box, the same figures and the reminder appear beneath each of Claude's answers (option "Line beneath each answer").
 
 **Usage line** above the prompt (and, in the terminal, on the status line):
 
@@ -84,7 +84,8 @@ Every option can be changed interactively:
 | Auto-compact | on | compact the main conversation |
 | Auto-compact threshold (%) | 65 | when it compacts |
 | Models for reminder and auto-compact | `opus` | comma-separated model id fragments; empty = every model |
-| Usage line above the prompt | on | context, limits and cost above the prompt (terminal and VS Code panel) |
+| Usage line above the prompt | on | context, limits and cost above the prompt (terminal) |
+| Line beneath each answer | auto | usage line and reminder beneath Claude's answers; auto = only where no band is drawn (VS Code panel), always, off |
 | Usage status line | on | the same line on the status line under the prompt (terminal only) |
 | Usage limit warning (%) | 80 | warning when a limit reaches it; 0 = off |
 | Status file for VS Code | on | writes `~/.claude/context-guard/sessions/*.json` for the VS Code extension |

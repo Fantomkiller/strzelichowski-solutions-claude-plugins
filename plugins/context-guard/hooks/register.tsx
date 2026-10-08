@@ -115,6 +115,10 @@ export const register: Register = (on, options) => {
     compactPercent: Number(options.compact_percent ?? 65),
   }
   const tellModel = options.reminder_tell_model === true
+  // Text beneath each answer: the one plugin output the VS Code panel shows.
+  // auto = only on surfaces that draw no band above the prompt.
+  const answerFooter = String(options.answer_footer ?? 'auto')
+  let surface: string | null = null
   const limitWarnPercent = Number(options.limit_warn_percent ?? 80)
   const models = String(options.models ?? 'opus')
     .split(',')
@@ -136,6 +140,7 @@ export const register: Register = (on, options) => {
   const warnedLimits = new Set<string>()
 
   on('session.start', async ($, e, next) => {
+    surface = e.surface
     const r = await next(e)
     if (!settings.usageStatus && !settings.usageBand && !settings.statusFile) return r
     const usage = await $.session.usage()
@@ -178,6 +183,27 @@ export const register: Register = (on, options) => {
     // A deny after next() does not undo the call: the model reads it in place of the result.
     return deny === undefined ? ran : { deny }
   }).catch(($, e, next) => next(e)) // a broken guard must not take the subagent's tools down
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    const isWanted = answerFooter === 'always' || (answerFooter === 'auto' && surface !== 'terminal' && surface !== 'desktop')
+    if (!isWanted || e.agentId !== undefined || e.isAborted) return r
+
+    const usage = await $.session.usage()
+    const percent = usage.context.percent
+    const parts: string[] = []
+    if (settings.reminderEnabled && appliesTo(mainModel) && percent !== undefined && percent >= settings.reminderPercent) {
+      const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
+      parts.push(`⚠ Context ${percent}%: run /${$.plugin.name}:handoff, then /clear.${fallback}`)
+    }
+    const line = usageText(usage)
+    if (line) parts.push(line)
+    if (parts.length === 0) return r
+
+    const footer = parts.join('\n')
+    // Another plugin already put text beneath the answer: ours goes after it.
+    return { ...r, text: r.text === e.answer ? footer : `${r.text}\n${footer}` }
+  }).catch(($, e, next) => next(e)) // a failed footer leaves the answer as it was
 
   // Fires after each main-thread turn: the only point the fill is read and acted on.
   on('session.measure', async ($, e, next) => {

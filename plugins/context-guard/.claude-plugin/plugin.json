@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"
@@ -52,6 +52,17 @@
       "title": "Usage line above the prompt",
       "description": "Show context fill, the 5-hour and weekly usage limits and the session cost in the band above the prompt (terminal and the Claude Code panel in VS Code)",
       "default": true
+    },
+    "answer_footer": {
+      "type": "string",
+      "title": "Line beneath each answer",
+      "description": "Usage line (and the handoff reminder) beneath Claude's answers. auto: only where no band above the prompt is drawn (the VS Code panel); always; off",
+      "options": [
+        "auto",
+        "always",
+        "off"
+      ],
+      "default": "auto"
     },
     "usage_status": {
       "type": "boolean",

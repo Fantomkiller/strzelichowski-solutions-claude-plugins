@@ -200,3 +200,28 @@ test('a conversation still above the threshold after compacting is not compacted
   await measure($, 71)
   expect(compactions.count).toBe(2)
 })
+
+const completeTurn = async ($: Engine, answer: string) =>
+  $.turn.complete({ turnId: 't', answer, durationMs: 1000, isAborted: false, reason: 'answer' })
+
+test('beneath each answer: the usage line, and the reminder past the threshold', { options: { answer_footer: 'always' } }, async ($, on) => {
+  engine(on)
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { percent: 61, tokens: 610_000, window: WINDOW },
+      rateLimits: [{ kind: 'seven_day', percentUsed: 59, resetsAt: new Date(Date.now() + 2 * 86_400_000).toISOString() }],
+    },
+  }))
+  await mainStep($, 'claude-opus-5-5')
+  const r = await completeTurn($, 'the answer')
+  expect(r.text).toMatch(/^⚠ Context 61%: run \/context-guard:handoff, then \/clear\. Auto-compact at 65%\.\nctx 61% \| week 59% \(reset (1d23h|2d0h)\)$/)
+})
+
+test('no line beneath answers when switched off', { options: { answer_footer: 'off' } }, async ($, on) => {
+  engine(on)
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  const r = await completeTurn($, 'the answer')
+  expect(r.text).toBe('the answer')
+})
