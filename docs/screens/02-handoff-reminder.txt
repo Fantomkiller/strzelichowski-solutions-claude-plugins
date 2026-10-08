@@ -1,0 +1,17 @@
+ ▐▛███▛█   Claude Code v2.1.293
+▝▜██████▀  Haiku 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/work/demo-project
+
+❯ Reply with the single word: ready
+
+⏺ ready
+
+✻ Churned for 1s · done 2:03 PM
+Context 5% (49k/1M): run /context-guard:handoff, then /clear. [ Hide ]                                                                  [-]
+ctx 5% | 5h 11% (reset 4h56m) | week 58% (reset 2d6h) | $0.00
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ context-guard: ctx 5% | 5h 11% (reset 4h56m) | week 58% (reset 2d6h) | $0.00
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                              26% until auto-compact

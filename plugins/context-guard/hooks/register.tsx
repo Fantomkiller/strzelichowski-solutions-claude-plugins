@@ -126,6 +126,12 @@ export const register: Register = (on, options) => {
   // below are the main conversation's, and the thresholds apply per model.
   let mainModel = ''
   let isCompacting = false
+  // After a compaction, the next one waits until the context grew this many points
+  // past the size it came back at, so a conversation that stays above the threshold
+  // is not compacted turn after turn.
+  const RECOMPACT_GROWTH = 5
+  let isAfterCompaction = false
+  let compactFloor = 0
   // Usage-limit windows already warned about, by kind and reset time.
   const warnedLimits = new Set<string>()
 
@@ -149,7 +155,13 @@ export const register: Register = (on, options) => {
 
   on('session.compact', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId === undefined || r.messages === undefined) return r
+    if (r.messages === undefined) return r
+    if (e.agentId === undefined) {
+      // The main conversation shrank: the band's figures are stale until the next measure.
+      await update($, fill, () => null)
+      isAfterCompaction = true
+      return r
+    }
     if (subagentCap.observeCompaction(e.agentId, r.tokensAfter)) {
       const sizes =
         r.tokensBefore !== undefined && r.tokensAfter !== undefined ? `: ${k(r.tokensBefore)} -> ${k(r.tokensAfter)}` : ''
@@ -193,6 +205,13 @@ export const register: Register = (on, options) => {
     const now: Fill = { percent, tokens: tokens ?? 0, window }
     await update($, fill, () => now)
 
+    if (isAfterCompaction) {
+      isAfterCompaction = false
+      compactFloor = percent + RECOMPACT_GROWTH
+    } else if (percent < settings.compactPercent) {
+      compactFloor = 0
+    }
+
     if (percent < settings.reminderPercent) {
       await update($, isHidden, () => false)
       await update($, isReminded, () => false)
@@ -210,13 +229,18 @@ export const register: Register = (on, options) => {
       )
     }
 
-    if (settings.compactEnabled && percent >= settings.compactPercent && !isCompacting) {
+    if (settings.compactEnabled && percent >= Math.max(settings.compactPercent, compactFloor) && !isCompacting) {
       isCompacting = true
       $.ui.toast(`Context ${percent}% passed ${settings.compactPercent}%: compacting`)
       await tell($, `⚠ [context-guard] Context at ${percent}% passed ${settings.compactPercent}%: compacting the conversation.`, undefined)
       // Between turns, as /compact runs; rejected while a turn runs, so the next measure retries.
       try {
-        await $.session.compact()
+        // The plugin's own session.compact hook is skipped for its own call: mark it here.
+        const done = await $.session.compact()
+        if (done.messages !== undefined) {
+          isAfterCompaction = true
+          await update($, fill, () => null)
+        }
       } catch {
         // a turn started meanwhile: the next measure tries again
       } finally {

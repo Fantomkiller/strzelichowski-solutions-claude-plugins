@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"

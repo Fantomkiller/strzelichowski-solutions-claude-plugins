@@ -188,3 +188,15 @@ test('the reminder is announced once per crossing, even across reloads of the st
   await measure($, 63)
   expect(engineSide.rows.filter(r => r.type === 'system' && /Context at/.test(r.text)).length).toBe(2)
 })
+
+test('a conversation still above the threshold after compacting is not compacted again each turn', async ($, on) => {
+  const compactions = engine(on)
+  await mainStep($, 'claude-opus-5-5')
+  await measure($, 66)
+  expect(compactions.count).toBe(1)
+  await measure($, 66) // came back at 66%: the floor is now 71%
+  await measure($, 68)
+  expect(compactions.count).toBe(1)
+  await measure($, 71)
+  expect(compactions.count).toBe(2)
+})

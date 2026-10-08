@@ -1,0 +1,19 @@
+ ▐▛███▛█   Claude Code v2.1.293
+▝▜██████▀  Haiku 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/work/demo-project
+
+❯ Reply with the single word: ready
+
+⏺ ready
+
+✻ Crunched for 1s · done 2:05 PM
+
+✢ Compacting conversation… (1s · ↓ 4 tokens)
+Context 5% (49k/1M): run /context-guard:handoff, then /clear. Auto-compact at 2%. [ Hide ]                                              [-]
+ctx 5% | 5h 13% (reset 4h54m) | week 59% (reset 2d6h) | $0.00
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ context-guard: ctx 5% | 5h 13% (reset 4h54m) | week 59% (reset 2d6h) | $0.00
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt                                  context-guard: Context 5% passed 2%: compacting

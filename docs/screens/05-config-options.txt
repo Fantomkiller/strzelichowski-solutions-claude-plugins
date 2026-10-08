@@ -1,0 +1,35 @@
+ ▐▛███▛█   Claude Code v2.1.293
+▝▜██████▀  Haiku 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/work/demo-project
+
+❯ /config
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Settings  Status   Config   Usage   Stats
+
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+  │ ⌕ guard                                                                                                                              │
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  ❯ Handoff reminder · context-guard                      true
+    Handoff reminder threshold (%) · context-guard        60
+    Set by --settings for this session (pluginConfigs)
+    Reminder through Claude · context-guard               false
+    Auto-compact · context-guard                          true
+    Set by --settings for this session (pluginConfigs)
+    Auto-compact threshold (%) · context-guard            65
+    Set by --settings for this session (pluginConfigs)
+    Models for reminder and auto-compact · context-guard  haiku
+    Set by --settings for this session (pluginConfigs)
+    Usage line above the prompt · context-guard           true
+    Set by --settings for this session (pluginConfigs)
+    Usage status line · context-guard                     true
+    Set by --settings for this session (pluginConfigs)
+    Usage limit warning (%) · context-guard               80 ›
+    Status file for VS Code · context-guard               false
+    Set by --settings for this session (pluginConfigs)
+    Subagent token ceiling · context-guard                true
+    Subagent token ceiling (tokens) · context-guard       100000 ›
+    Subagent ceiling models · context-guard               haiku-5-5 ›
+
+  Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear

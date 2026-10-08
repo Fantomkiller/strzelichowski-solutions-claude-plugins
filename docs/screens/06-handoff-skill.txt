@@ -1,0 +1,48 @@
+⏺ Bash(cat README.md; echo "---"; ls -la; date '+%Y-%m-%d %H:%M')
+  ⎿  # Demo project
+
+     A tiny project used to demo the context-guard plugin.
+     … +7 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+⏺ Bash(mkdir -p ~/.claude/handoffs/demo-project && ls -la ~/.claude/handoffs/demo-project)
+  ⎿  total 0
+     drwxr-xr-x@ 2 you  staff  64 Oct  8 14:07 .
+     drwxr-xr-x@ 3 you  staff  96 Oct  8 14:07 ..
+  ⎿  Allowed by auto mode classifier
+
+⏺ Write(~/.claude/handoffs/demo-project/PFX-42-demo.md)
+  ⎿  Wrote 37 lines to ~/.claude/handoffs/demo-project/PFX-42-demo.md
+       1 # Handoff: demo-project @ PFX-42-demo
+       2
+       3 Project home: /Users/you/work/demo-project, branch PFX-42-demo. If either di
+       4
+       5 ## What this is
+       6
+       7 Task: PFX-42 (ticket key taken from the branch name; no ticket content was read in this session).
+         firm the actual goal of PFX-42 with the user before building anything.
+       9
+      10 ## Current state (2026-10-08 14:07)
+     … +35 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+⏺ The handoff file is written to ~/.claude/handoffs/demo-project/PFX-42-demo.md. The repo is unchanged: nothing was added, committed, pushed
+  or stashed. The branch has no commits and no upstream, and the only untracked file is README.md.
+
+  Working directory must be
+  /Users/you/work/demo-project on
+  branch PFX-42-demo (check with pwd and git branch --show-current; if either differs, STOP and tell me). Read
+  ~/.claude/handoffs/demo-project/PFX-42-demo.md and the project's CLAUDE.md, then STOP: brief me on the state, present next-step options
+  with "Next up" as the marked default, and wait for my answer. Build nothing until I answer; anything I write below this opener counts as
+  that answer.
+
+  Safe to clear.
+
+✻ Sautéed for 20s · done 2:07 PM
+ctx 5% | 5h 13% (reset 4h52m) | week 59% (reset 2d6h) | $0.01                                                                           [-]
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ context-guard: ctx 5% | 5h 13% (reset 4h52m) | week 59% (reset 2d6h) | $0.01
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                              19% until auto-compact
