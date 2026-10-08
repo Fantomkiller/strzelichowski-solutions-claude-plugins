@@ -1,0 +1,77 @@
+{
+  "name": "context-guard",
+  "version": "0.4.0",
+  "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
+  "author": {
+    "name": "Miłosz Strzelichowski"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "reminder_enabled": {
+      "type": "boolean",
+      "title": "Handoff reminder",
+      "description": "Show a band and a notification when the main conversation passes the reminder threshold",
+      "default": true
+    },
+    "reminder_percent": {
+      "type": "number",
+      "title": "Handoff reminder threshold (%)",
+      "description": "Context fill, as a percentage of the model's window, at which the reminder shows",
+      "default": 60,
+      "min": 10,
+      "max": 95
+    },
+    "compact_enabled": {
+      "type": "boolean",
+      "title": "Auto-compact",
+      "description": "Compact the main conversation when it passes the compaction threshold",
+      "default": true
+    },
+    "compact_percent": {
+      "type": "number",
+      "title": "Auto-compact threshold (%)",
+      "description": "Context fill, as a percentage of the model's window, at which the main conversation is compacted",
+      "default": 65,
+      "min": 10,
+      "max": 95
+    },
+    "models": {
+      "type": "string",
+      "title": "Models for reminder and auto-compact",
+      "description": "Comma-separated fragments of model ids the reminder and auto-compact apply to (e.g. opus,sonnet); empty means every model",
+      "default": "opus"
+    },
+    "usage_status": {
+      "type": "boolean",
+      "title": "Usage status line",
+      "description": "Show context fill, the 5-hour and weekly usage limits and the session cost on the status line (terminal)",
+      "default": true
+    },
+    "status_file": {
+      "type": "boolean",
+      "title": "Status file for VS Code",
+      "description": "Write context fill and usage limits to ~/.claude/context-guard/sessions/ for the Context Guard VS Code extension",
+      "default": true
+    },
+    "subagent_cap_enabled": {
+      "type": "boolean",
+      "title": "Subagent token ceiling",
+      "description": "Cut oversized tool results in subagents so their requests stay under the token ceiling",
+      "default": true
+    },
+    "subagent_cap_tokens": {
+      "type": "number",
+      "title": "Subagent token ceiling (tokens)",
+      "description": "Ceiling for a capped subagent's request; Claude Haiku 5.5 bills 5x past 100000. Keep the model's auto-compact window (settings modelSettings.<model>.autoCompactWindow) at or below it",
+      "default": 100000,
+      "min": 20000,
+      "max": 1000000
+    },
+    "subagent_cap_models": {
+      "type": "string",
+      "title": "Subagent ceiling models",
+      "description": "Comma-separated fragments of model ids the subagent ceiling applies to; empty means every model",
+      "default": "haiku-5-5"
+    }
+  }
+}

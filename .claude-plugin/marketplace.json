@@ -1,0 +1,14 @@
+{
+  "name": "strzelichowski-solutions",
+  "owner": {
+    "name": "Miłosz Strzelichowski"
+  },
+  "description": "Claude Code plugins by Strzelichowski Solutions: session handoff and context guards",
+  "plugins": [
+    {
+      "name": "context-guard",
+      "source": "./plugins/context-guard",
+      "description": "Session handoff (/context-guard:handoff), handoff reminder at 60% and auto-compact at 65% context, usage limits on the status line, and a token ceiling for Haiku 5.5 subagents; all configurable in /config"
+    }
+  ]
+}
