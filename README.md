@@ -47,82 +47,34 @@ Usage limits appear on a Claude subscription only; with an API key the line show
 
 Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). The Claude Code panel in VS Code shows the same line above its prompt box.
 
-Usage line above the prompt and on the status line ([full capture](docs/screens/01-usage-line.txt)):
+**Usage line** above the prompt (and, in the terminal, on the status line):
 
-```
-⏺ ready
+![Usage line](docs/screens/01-usage-line.png)
 
-✻ Sautéed for 1s · done 2:02 PM
+**Handoff reminder** once the context passes the threshold:
 
-ctx 5% | 5h 11% (reset 4h57m) | week 58% (reset 2d6h) | $0.01                                       [-]
-─────────────────────────────────────────────────────────────────────────────────────────────────────
-❯
-─────────────────────────────────────────────────────────────────────────────────────────────────────
-  ⚠ context-guard: ctx 5% | 5h 11% (reset 4h57m) | week 58% (reset 2d6h) | $0.01
-```
+![Handoff reminder](docs/screens/02-handoff-reminder.png)
 
-Handoff reminder past the threshold ([full capture](docs/screens/02-handoff-reminder.txt)):
+**Auto-compact** past its threshold, then Claude Code's own compaction:
 
-```
-Context 5% (49k/1M): run /context-guard:handoff, then /clear. [ Hide ]                              [-]
-ctx 5% | 5h 11% (reset 4h56m) | week 58% (reset 2d6h) | $0.00
-─────────────────────────────────────────────────────────────────────────────────────────────────────
-❯
-```
+![Auto-compact running](docs/screens/03-auto-compact-running.png)
 
-Auto-compact ([running](docs/screens/03-auto-compact-running.txt), [done](docs/screens/04-auto-compact-done.txt)):
+![Auto-compact done](docs/screens/04-auto-compact-done.png)
 
-```
-✢ Compacting conversation… (1s · ↓ 4 tokens)
+**`/context-guard:handoff`** writes the handoff file ([example](docs/examples/handoff-PFX-42-demo.md)) and prints the opener for a fresh session:
 
-Context 5% (49k/1M): run /context-guard:handoff, then /clear. Auto-compact at 2%. [ Hide ]
-...
-  ⏵⏵ auto mode on · esc to interrupt                         context-guard: Context 5% passed 2%: compacting
-
-✻ Conversation compacted (ctrl+o for history)
-```
-
-`/context-guard:handoff` ([full capture](docs/screens/06-handoff-skill.txt), [the file it wrote](docs/examples/handoff-PFX-42-demo.md)):
-
-```
-⏺ Write(~/.claude/handoffs/demo-project/PFX-42-demo.md)
-  ⎿  Wrote 37 lines to ~/.claude/handoffs/demo-project/PFX-42-demo.md
-
-⏺ The handoff file is written to ~/.claude/handoffs/demo-project/PFX-42-demo.md. The repo is unchanged:
-  nothing was added, committed, pushed or stashed.
-
-  Working directory must be /Users/you/work/demo-project on branch PFX-42-demo (check with pwd and
-  git branch --show-current; if either differs, STOP and tell me). Read
-  ~/.claude/handoffs/demo-project/PFX-42-demo.md and the project's CLAUDE.md, then STOP: ...
-
-  Safe to clear.
-```
+![Handoff skill](docs/screens/06-handoff-skill.png)
 
 ## Settings
 
 Every option can be changed interactively:
 
-- **`/config`**, then type `guard` to filter: each option is a row; Enter toggles a switch or edits a value ([capture](docs/screens/05-config-options.txt)).
+- **`/config`**, then type `guard` to filter: each option is a row; Enter toggles a switch or edits a value.
 - **`/plugin configure context-guard@strzelichowski-solutions`**: a form with all options.
 - **VS Code**: `/plugins`, then the gear icon on the plugin's row.
 - **`~/.claude/settings.json`**: `"pluginConfigs": { "context-guard@strzelichowski-solutions": { "options": { "reminder_percent": 50 } } }`.
 
-```
-  │ ⌕ guard                                                               │
-  ❯ Handoff reminder · context-guard                      true
-    Handoff reminder threshold (%) · context-guard        60
-    Reminder through Claude · context-guard               false
-    Auto-compact · context-guard                          true
-    Auto-compact threshold (%) · context-guard            65
-    Models for reminder and auto-compact · context-guard  opus
-    Usage line above the prompt · context-guard           true
-    Usage status line · context-guard                     true
-    Usage limit warning (%) · context-guard               80 ›
-    Status file for VS Code · context-guard               true
-    Subagent token ceiling · context-guard                true
-    Subagent token ceiling (tokens) · context-guard       100000 ›
-    Subagent ceiling models · context-guard               haiku-5-5 ›
-```
+![Plugin options in /config](docs/screens/05-config-options.png)
 
 | Option | Default | Meaning |
 | --- | --- | --- |
