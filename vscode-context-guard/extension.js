@@ -200,7 +200,6 @@ const tooltipFor = ({ chat: e, others, limits }, now) => {
     )
   }
   if (limits.length === 0) t.appendMarkdown(`_No plan limits reported (API key or not yet measured)_\n\n`)
-  if (e?.cost) t.appendMarkdown(`Chat cost: $${e.cost.usd.toFixed(2)}\n\n`)
   if (e?.isWatched) {
     t.appendMarkdown(
       `Handoff reminder ${e.reminderEnabled ? `at ${e.reminderPercent}%` : 'off'} · auto-compact ${e.compactEnabled ? `at ${e.compactPercent}%` : 'off'}\n\n`,
@@ -243,7 +242,6 @@ const detailsHtml = ({ chat: e, others, limits }, now) => {
   }
   if (limits.length === 0) body += '<p class="muted">No plan limits reported (API key, or not measured yet).</p>'
   if (e !== undefined) {
-    if (e.cost) body += `<p>Chat cost: <b>$${e.cost.usd.toFixed(2)}</b></p>`
     if (e.isWatched) {
       body += `<p class="muted">Handoff reminder ${e.reminderEnabled ? `at ${e.reminderPercent}%` : 'off'} · auto-compact ${
         e.compactEnabled ? `at ${e.compactPercent}%` : 'off'

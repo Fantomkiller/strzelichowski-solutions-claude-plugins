@@ -34,18 +34,19 @@ code --install-extension context-guard-status.vsix
 
 | Feature | Where you see it |
 | --- | --- |
-| Context fill, 5-hour and weekly usage limits with time to reset, session cost; each figure green, yellow (context past the reminder, a limit past 80%) or red (context past auto-compact, a limit past 95%) | terminal: a line above the prompt and on the status line; VS Code panel (which draws no plugin elements above its prompt): a line beneath each of Claude's answers |
-| Handoff reminder once the main conversation passes **60%** of the model's context | terminal: yellow line above the prompt with a **Hide** button, plus a notification; VS Code panel: a line beneath each answer |
+| Context fill, 5-hour and weekly usage limits with time to reset; each figure green, yellow (context past the reminder, a limit past 80%) or red (context past auto-compact, a limit past 95%) | terminal: a line above the prompt and on the status line; VS Code: the status bar extension (the Claude Code panel draws no plugin elements) |
+| Handoff reminder once the main conversation passes **60%** of the model's context | terminal: yellow line above the prompt with a **Hide** button, plus a notification; VS Code: the status bar extension's warning and notification |
 | `/context-guard:handoff`: writes `~/.claude/handoffs/<repo>/<branch>.md` and prints an opener for a fresh session; never commits, pushes, stages or stashes | in the conversation |
 | Auto-compact of the main conversation at **65%**; a conversation that stays above the threshold after compacting is compacted again only after it grows 5 more points | notification, then Claude Code's own "Conversation compacted" |
 | Warning when a 5-hour or weekly limit passes **80%** | notice added to the conversation |
-| Token ceiling for subagents (default Claude Haiku 5.5, **100k**): an oversized tool result is cut so the next request stays under the ceiling; the subagent keeps working | in the subagent's tool result |
+| Token ceiling for subagents (default Claude Haiku 5.5, **100k**): Claude Code compacts the subagent at ~95k (see below) and it carries on; a tool result too large even after that is cut | in the subagent's tool result |
+| Sizing guidance: the orchestrator is told to split work into small Haiku subagents that fit their room; each one is told its budget | system prompt, subagent's task |
 
-Usage limits appear on a Claude subscription only; with an API key the line shows context and cost. Figures refresh after each turn. Nothing the plugin posts in the conversation (notices, the line beneath answers) is sent to Claude, so it adds nothing to the context.
+Usage limits appear on a Claude subscription only; with an API key the line shows context alone. Figures refresh after each turn. The plugin writes nothing beneath Claude's answers, and its notices in the conversation are never sent to Claude, so it adds nothing to the context.
 
 ## What it looks like
 
-Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). In the Claude Code panel in VS Code, which does not draw plugin elements around its prompt box, the same figures and the reminder appear beneath each of Claude's answers (option "Line beneath each answer").
+Captured from a real terminal session (Claude Code 2.1.293, Claude Haiku 5.5, thresholds lowered so they trip on a short conversation). The Claude Code panel in VS Code does not draw plugin elements around its prompt box; there the status bar extension shows the same figures and the reminder.
 
 **Usage line** above the prompt (and, in the terminal, on the status line):
 
@@ -83,27 +84,31 @@ Every option can be changed interactively:
 | Auto-compact | on | compact the main conversation |
 | Auto-compact threshold (%) | 65 | when it compacts |
 | Models for reminder and auto-compact | `opus` | comma-separated model id fragments; empty = every model |
-| Usage line above the prompt | on | context, limits and cost above the prompt (terminal) |
-| Line beneath each answer | auto | usage line and reminder beneath Claude's answers; auto = only where no band is drawn (VS Code panel), always, off |
+| Usage line above the prompt | on | context and limits above the prompt (terminal) |
 | Usage status line | on | the same line on the status line under the prompt (terminal only) |
 | Usage limit warning (%) | 80 | warning when a limit reaches it; 0 = off |
 | Status file for VS Code | on | writes one `~/.claude/context-guard/sessions/<session id>.json` per session for the VS Code extension |
+| Subagent sizing guidance | on | tells the orchestrator to split work into small capped subagents, and each capped subagent its budget |
 | Subagent token ceiling | on | the subagent guard |
 | Subagent token ceiling (tokens) | 100000 | the ceiling |
+| Subagent compaction point (tokens) | 95000 | where Claude Code compacts a capped subagent: `autoCompactWindow` less 33000 |
 | Subagent ceiling models | `haiku-5-5` | comma-separated model id fragments; empty = every model |
 
 ## Subagent compaction
 
-The plugin cannot compact a subagent; Claude Code does that by itself. To make a Claude Haiku 5.5 subagent compact at ~95k (just below its 5x price step at 100k) and keep working, add to `~/.claude/settings.json`:
+The plugin cannot compact a subagent; Claude Code does that by itself, before the request that would pass the model's compaction point. That point is the compaction window less a fixed 33k buffer (`/context` shows it as "Autocompact buffer"); `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` does not move it. To make a Claude Haiku 5.5 subagent compact at ~95k, just below its 5x price step at 100k, and keep working, add to `~/.claude/settings.json`:
 
 ```json
 {
-  "modelSettings": { "claude-haiku-5-5": { "autoCompactWindow": 100000, "effortLevel": "high" } },
-  "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "95" }
+  "modelSettings": { "claude-haiku-5-5": { "autoCompactWindow": 128000 } }
 }
 ```
 
-`autoCompactWindow` takes 100000 at least; keep the plugin's subagent ceiling at or above the point where compaction runs. `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` applies to every model, so it also brings other models' automatic compaction a little earlier.
+Measured on a Haiku 5.5 subagent reading 25 files of ~13k tokens each: it compacted every four files (at ~96k, back to ~48k), its largest request was ~96k, and it finished the task. With `autoCompactWindow` at 100000 it compacts at 67k, and since a subagent starts with ~30-40k tokens in use (system prompt, tool definitions, its task) and comes back to ~48k after a compaction, it refilled within three turns and Claude Code stopped it ("Autocompact is thrashing"). Keep the compaction point well above a subagent's starting size.
+
+The plugin's options follow the same numbers: **Subagent compaction point** (95000) is where Claude Code compacts, and a tool result that fits after that compaction passes whole; only a result too large even then is cut to stay under the **ceiling** (100000).
+
+**Subagent sizing guidance** (on by default) adds a short section to the orchestrator's system prompt (the models for reminder and auto-compact, `opus` by default): prefer several small capped subagents whose reading fits in their room (about 60k), split large inputs, ask for compact answers. Each capped subagent's task also gets one paragraph with its budget and an instruction to carry on after a compaction.
 
 ## Development
 

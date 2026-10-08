@@ -70,6 +70,29 @@ test('near the limit the subagent keeps working: tools still run, results are cu
   expect(s.usage).toMatchObject({ input_tokens: 96_000 })
 })
 
+test('past the compaction point a result that fits after compacting passes whole', async ($, on) => {
+  let context = 38_000 // the subagent's starting context
+  fakeModel(on, () => context)
+  fakeTool(on, () => 39_000) // ~13k tokens: 85k + 13k passes 97k, 38k + 8k + 13k does not
+  await step($, 0)
+  context = 85_000
+  await step($, 1)
+  const r = await read($)
+  expect(r.deny).toBeUndefined()
+  expect(r.text?.length).toBe(39_000)
+})
+
+test('without a compaction point under the ceiling the same result is cut', { options: { subagent_compact_tokens: 1_000_000 } }, async ($, on) => {
+  let context = 38_000
+  fakeModel(on, () => context)
+  fakeTool(on, () => 39_000)
+  await step($, 0)
+  context = 85_000
+  await step($, 1)
+  const r = await read($)
+  expect(r.deny).toMatch(/DID run/)
+})
+
 test('the main conversation is never touched', async ($, on) => {
   fakeModel(on, () => 150_000)
   fakeTool(on, () => 600_000)
@@ -108,4 +131,62 @@ test('subagents on other models are never touched', async ($, on) => {
   await step($, 0, AGENT, 'claude-sonnet-5-5')
   const r = await read($)
   expect(r.deny).toBeUndefined()
+})
+
+// Stands in for the engine's system prompt: one section of its own.
+const composed = async ($: Engine, on: On, model: string) => {
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine', scope: 'shared' as const }] }))
+  const r = await $.prompt.compose({ model, promptModel: model, surfaces: [], tools: [], outputStyle: null, traits: [] })
+  return r.sections.find(s => s.id === 'context-guard:delegation')?.text
+}
+
+test('the orchestrator is told how to size work for capped subagents', async ($, on) => {
+  const note = await composed($, on, 'claude-opus-5-5')
+  expect(note).toMatch(/several small subagents/)
+  expect(note).toMatch(/compacts them at about 95k/)
+  expect(note).toMatch(/roughly 60k/)
+})
+
+test('capped subagents themselves get no orchestrator guidance', async ($, on) => {
+  expect(await composed($, on, 'claude-haiku-5-5')).toBeUndefined()
+})
+
+test('the guidance can be switched off', { options: { delegation_guidance: false } }, async ($, on) => {
+  expect(await composed($, on, 'claude-opus-5-5')).toBeUndefined()
+})
+
+// Stands in for the Agent tool: records the task each subagent starts with.
+const spawner = (on: On) => {
+  const prompts: string[] = []
+  on('agent.spawn', (_$, e) => {
+    prompts.push(e.prompt)
+    return { model: e.model ?? e.parentModel }
+  })
+  return async ($: Engine, model: string | undefined) => {
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Read the files.',
+      description: 'read',
+      subagentType: 'general-purpose',
+      provider: { plugin: 'engine', tier: 'core' },
+      parentModel: 'claude-opus-5-5',
+      background: false,
+      fork: false,
+      ...(model ? { model } : {}),
+    })
+    return prompts.at(-1) ?? ''
+  }
+}
+
+test('a capped subagent is told its budget and to carry on after compacting', async ($, on) => {
+  const prompt = await spawner(on)($, 'haiku')
+  expect(prompt).toMatch(/^Read the files\.\n\n\[context-guard\]/)
+  expect(prompt).toMatch(/compacted automatically at about 95k/)
+  expect(prompt).toMatch(/do not start over/)
+})
+
+test('other subagents start with their task as given', async ($, on) => {
+  const spawn = spawner(on)
+  expect(await spawn($, 'sonnet')).toBe('Read the files.')
+  expect(await spawn($, undefined)).toBe('Read the files.')
 })

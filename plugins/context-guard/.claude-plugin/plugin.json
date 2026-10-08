@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"
@@ -44,19 +44,8 @@
     "usage_band": {
       "type": "boolean",
       "title": "Usage line above the prompt",
-      "description": "Show context fill, the 5-hour and weekly usage limits and the session cost in the band above the prompt (terminal and the Claude Code panel in VS Code)",
+      "description": "Show context fill and the 5-hour and weekly usage limits in the band above the prompt (terminal)",
       "default": true
-    },
-    "answer_footer": {
-      "type": "string",
-      "title": "Line beneath each answer",
-      "description": "Usage line (and the handoff reminder) beneath Claude's answers. auto: only where no band above the prompt is drawn (the VS Code panel); always; off",
-      "options": [
-        "auto",
-        "always",
-        "off"
-      ],
-      "default": "auto"
     },
     "usage_status": {
       "type": "boolean",
@@ -78,6 +67,12 @@
       "description": "Write each session's context fill and usage limits to ~/.claude/context-guard/sessions/ for the Context Guard VS Code extension",
       "default": true
     },
+    "delegation_guidance": {
+      "type": "boolean",
+      "title": "Subagent sizing guidance",
+      "description": "Tell the orchestrator (the models for reminder and auto-compact) to split work into small capped subagents that fit their room, and tell each capped subagent its budget and to carry on after a compaction",
+      "default": true
+    },
     "subagent_cap_enabled": {
       "type": "boolean",
       "title": "Subagent token ceiling",
@@ -87,8 +82,16 @@
     "subagent_cap_tokens": {
       "type": "number",
       "title": "Subagent token ceiling (tokens)",
-      "description": "Ceiling for a capped subagent's request; Claude Haiku 5.5 bills 5x past 100000. Keep the model's auto-compact window (settings modelSettings.<model>.autoCompactWindow) at or below it",
+      "description": "Ceiling for a capped subagent's request; Claude Haiku 5.5 bills 5x past 100000",
       "default": 100000,
+      "min": 20000,
+      "max": 1000000
+    },
+    "subagent_compact_tokens": {
+      "type": "number",
+      "title": "Subagent compaction point (tokens)",
+      "description": "Where Claude Code compacts a capped subagent: settings modelSettings.<model>.autoCompactWindow less its 33000 buffer (128000 gives 95000). A tool result that fits after that compaction is not cut",
+      "default": 95000,
       "min": 20000,
       "max": 1000000
     },

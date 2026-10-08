@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionContextUsage, SessionCost, SessionRateLimit } from 'claude-code'
+import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
 import type { Fill, Level, UsagePart } from '../types'
 import { createSubagentCap } from './subagent-cap'
@@ -24,7 +24,6 @@ type Settings = {
 type Usage = {
   context: SessionContextUsage
   rateLimits: readonly SessionRateLimit[]
-  cost?: SessionCost | undefined
 }
 
 type Session = {
@@ -71,7 +70,7 @@ const LEVEL_COLORS: Record<Level, string> = { ok: 'green', warn: 'yellow', dange
 const levelOf = (percent: number, warn: number, danger: number): Level =>
   percent >= danger ? 'danger' : percent >= warn ? 'warn' : 'ok'
 
-// Context fill, usage limits and session cost, each figure with its level.
+// Context fill and usage limits, each figure with its level.
 const usageParts = (usage: Usage, settings: Settings): UsagePart[] => {
   const now = Date.now()
   const parts: UsagePart[] = []
@@ -86,7 +85,6 @@ const usageParts = (usage: Usage, settings: Settings): UsagePart[] => {
       level: levelOf(limit.percentUsed, LIMIT_WARN_PERCENT, LIMIT_DANGER_PERCENT),
     })
   }
-  if (usage.cost !== undefined) parts.push({ text: `$${usage.cost.usd.toFixed(2)}`, level: null })
   return parts
 }
 
@@ -100,7 +98,6 @@ const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage,
   const entry: StatusEntry = {
     context: usage.context,
     rateLimits: usage.rateLimits,
-    cost: usage.cost,
     ...session,
     sessionId: session.sessionId ?? (await $.session.id()),
     cwd: await $.session.cwd(),
@@ -140,11 +137,8 @@ export const register: Register = (on, options) => {
     compactEnabled: options.compact_enabled !== false,
     compactPercent: Number(options.compact_percent ?? 65),
   }
-  // Text beneath each answer: the one plugin output the VS Code panel shows.
-  // auto = only on surfaces that draw no band above the prompt.
-  const answerFooter = String(options.answer_footer ?? 'auto')
-  let surface: string | null = null
   const limitWarnPercent = Number(options.limit_warn_percent ?? 80)
+  const delegationGuidance = options.delegation_guidance !== false
   const models = String(options.models ?? 'opus')
     .split(',')
     .map(m => m.trim().toLowerCase())
@@ -170,7 +164,6 @@ export const register: Register = (on, options) => {
   const sessionNow = () => ({ model: mainModel, isWatched: appliesTo(mainModel), activeAt })
 
   on('session.start', async ($, e, next) => {
-    surface = e.surface
     activeAt = Date.now()
     const r = await next(e)
     if (!settings.usageStatus && !settings.usageBand && !settings.statusFile) return r
@@ -233,31 +226,23 @@ export const register: Register = (on, options) => {
     return deny === undefined ? ran : { deny }
   }).catch(($, e, next) => next(e)) // a broken guard must not take the subagent's tools down
 
-  on('turn.complete', async ($, e, next) => {
+  // Sizing work for capped subagents: in the orchestrator's system prompt (the models the
+  // reminder watches), and in each capped subagent's task.
+  on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    const isWanted = answerFooter === 'always' || (answerFooter === 'auto' && surface !== 'terminal' && surface !== 'desktop')
-    if (!isWanted || e.agentId !== undefined || e.isAborted) return r
+    if (!delegationGuidance || !subagentCap.isEnabled || !appliesTo(e.model)) return r
+    return { sections: [...r.sections, { id: `${$.plugin.name}:delegation`, text: subagentCap.orchestratorNote, scope: 'session' }] }
+  }).catch(($, e, next) => next(e))
 
-    const usage = await $.session.usage()
-    const percent = usage.context.percent
-    const parts: string[] = []
-    if (settings.reminderEnabled && appliesTo(mainModel) && percent !== undefined && percent >= settings.reminderPercent) {
-      const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
-      parts.push(`⚠ Context ${percent}%: run /${$.plugin.name}:handoff, then /clear.${fallback}`)
-    }
-    const line = usageText(usageParts(usage, settings))
-    if (line) parts.push(line)
-    if (parts.length === 0) return r
-
-    const footer = parts.join('\n')
-    // Another plugin already put text beneath the answer: ours goes after it.
-    return { ...r, text: r.text === e.answer ? footer : `${r.text}\n${footer}` }
-  }).catch(($, e, next) => next(e)) // a failed footer leaves the answer as it was
+  on('agent.spawn', async ($, e, next) => {
+    if (!delegationGuidance || !subagentCap.isEnabled || !subagentCap.isCappedTarget(e.model ?? e.parentModel)) return next(e)
+    return next({ ...e, prompt: `${e.prompt}\n\n${subagentCap.subagentNote}` })
+  }).catch(($, e, next) => next(e))
 
   // Fires after each main-thread turn: the only point the fill is read and acted on.
   on('session.measure', async ($, e, next) => {
     const r = await next(e)
-    const usage: Usage = { context: e.context, rateLimits: e.rateLimits, cost: e.cost }
+    const usage: Usage = { context: e.context, rateLimits: e.rateLimits }
     lastUsage = usage
     activeAt = Date.now()
     await report($, settings, usage)
@@ -349,7 +334,7 @@ export const register: Register = (on, options) => {
         {line !== null ? (
           <Box>
             {line.map((part, i) => (
-              <Text key={`part${i}`} {...(part.level === null ? { dimColor: true } : { color: LEVEL_COLORS[part.level] })}>
+              <Text key={`part${i}`} color={LEVEL_COLORS[part.level]}>
                 {i > 0 ? ' | ' : ''}
                 {part.text}
               </Text>

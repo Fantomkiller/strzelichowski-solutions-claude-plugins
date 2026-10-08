@@ -110,7 +110,7 @@ test('thresholds and models are configurable', { options: { reminder_percent: 40
   expect(compactions.count).toBe(1)
 })
 
-test('the status line shows context, the usage limits and cost', async ($, on) => {
+test('the status line shows context and the usage limits, never a cost', async ($, on) => {
   engine(on)
   const lines: (string | undefined)[] = []
   on('ui.status', (_$, e) => {
@@ -127,7 +127,7 @@ test('the status line shows context, the usage limits and cost', async ($, on) =
     cost: { usd: 3.456 },
     changed: ['context', 'rateLimits', 'cost'],
   })
-  expect(lines.at(-1)).toMatch(/^ctx 12% \| 5h 42\.5% \(reset 2h\d+m\) \| week 18% \(reset 3d\d+h\) \| \$3\.46$/)
+  expect(lines.at(-1)).toMatch(/^ctx 12% \| 5h 42\.5% \(reset 2h\d+m\) \| week 18% \(reset 3d\d+h\)$/)
 })
 
 test('the status line can be switched off', { options: { usage_status: false } }, async ($, on) => {
@@ -250,7 +250,7 @@ test('each figure of the usage line is colored by its level', async ($, on) => {
   expect(await colorOf(/5h 20%/)).toMatchObject({ color: 'green' })
   expect(await colorOf(/week 85%/)).toMatchObject({ color: 'yellow' })
   expect(await colorOf(/spend 97%/)).toMatchObject({ color: 'red' })
-  expect(await colorOf(/\$1\.00/)).toMatchObject({ dimColor: true })
+  expect(await ui.find({ type: 'Text', text: /\$/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -274,29 +274,4 @@ test('a conversation still above the threshold after compacting is not compacted
   expect(compactions.count).toBe(1)
   await measure($, 71)
   expect(compactions.count).toBe(2)
-})
-
-const completeTurn = async ($: Engine, answer: string) =>
-  $.turn.complete({ turnId: 't', answer, durationMs: 1000, isAborted: false, reason: 'answer' })
-
-test('beneath each answer: the usage line, and the reminder past the threshold', { options: { answer_footer: 'always' } }, async ($, on) => {
-  engine(on)
-  on('turn.complete', (_$, e) => ({ text: e.answer }))
-  on('session.usage', () => ({
-    value: {
-      startedAt: 0,
-      context: { percent: 61, tokens: 610_000, window: WINDOW },
-      rateLimits: [{ kind: 'seven_day', percentUsed: 59, resetsAt: new Date(Date.now() + 2 * 86_400_000).toISOString() }],
-    },
-  }))
-  await mainStep($, 'claude-opus-5-5')
-  const r = await completeTurn($, 'the answer')
-  expect(r.text).toMatch(/^⚠ Context 61%: run \/context-guard:handoff, then \/clear\. Auto-compact at 65%\.\nctx 61% \| week 59% \(reset (1d23h|2d0h)\)$/)
-})
-
-test('no line beneath answers when switched off', { options: { answer_footer: 'off' } }, async ($, on) => {
-  engine(on)
-  on('turn.complete', (_$, e) => ({ text: e.answer }))
-  const r = await completeTurn($, 'the answer')
-  expect(r.text).toBe('the answer')
 })
