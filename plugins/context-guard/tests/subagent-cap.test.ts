@@ -143,6 +143,7 @@ const composed = async ($: Engine, on: On, model: string) => {
 test('the orchestrator is told how to size work for capped subagents', async ($, on) => {
   const note = await composed($, on, 'claude-opus-5-5')
   expect(note).toMatch(/several small subagents/)
+  expect(note).toMatch(/changes neither whether you delegate nor which model you pick/)
   expect(note).toMatch(/compacts them at about 95k/)
   expect(note).toMatch(/roughly 60k/)
 })

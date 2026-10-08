@@ -108,7 +108,7 @@ Measured on a Haiku 5.5 subagent reading 25 files of ~13k tokens each: it compac
 
 The plugin's options follow the same numbers: **Subagent compaction point** (95000) is where Claude Code compacts, and a tool result that fits after that compaction passes whole; only a result too large even then is cut to stay under the **ceiling** (100000).
 
-**Subagent sizing guidance** (on by default) adds a short section to the orchestrator's system prompt (the models for reminder and auto-compact, `opus` by default): prefer several small capped subagents whose reading fits in their room (about 60k), split large inputs, ask for compact answers. Each capped subagent's task also gets one paragraph with its budget and an instruction to carry on after a compaction.
+**Subagent sizing guidance** (on by default) adds a short section to the orchestrator's system prompt (the models for reminder and auto-compact, `opus` by default). It does not change when the orchestrator delegates or to which model: that stays its own call, or yours. Once it delegates to a capped subagent: prefer several small ones whose reading fits in their room (about 60k), split large inputs, ask for compact answers. Each capped subagent's task also gets one paragraph with its budget and an instruction to carry on after a compaction.
 
 ## Development
 
