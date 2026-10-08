@@ -176,7 +176,7 @@ const isReminderDue = e =>
 
 const tooltipFor = ({ chat: e, limits }, now) => {
   const t = new vscode.MarkdownString(undefined, true)
-  t.isTrusted = { enabledCommands: ['contextGuard.showDetails', CLAUDE_FOCUS] }
+  t.isTrusted = { enabledCommands: ['contextGuard.showDetails', 'contextGuard.copyHandoff', CLAUDE_FOCUS] }
   t.supportThemeIcons = true
   t.supportHtml = true
   t.appendMarkdown(`**Claude Code** · ${e ? titleOf(e) || e.model || 'model unknown' : 'no reading for this chat yet'}\n\n`)
@@ -202,7 +202,8 @@ const tooltipFor = ({ chat: e, limits }, now) => {
   }
   t.appendMarkdown('---\n\n')
   t.appendMarkdown(
-    `[$(graph) Details](command:contextGuard.showDetails) · [$(comment-discussion) Open Claude](command:${CLAUDE_FOCUS})`,
+    `[$(graph) Details](command:contextGuard.showDetails) · [$(copy) Copy handoff](command:contextGuard.copyHandoff) · ` +
+      `[$(comment-discussion) Open Claude](command:${CLAUDE_FOCUS})`,
   )
   return t
 }

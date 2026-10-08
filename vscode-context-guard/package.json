@@ -2,7 +2,7 @@
   "name": "context-guard-status",
   "displayName": "Context Guard status",
   "description": "Shows Claude Code context fill and usage limits (5-hour, weekly) on the VS Code status bar and reminds you to hand off. Reads what the context-guard Claude Code plugin writes.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "strzelichowski-solutions",
   "license": "UNLICENSED",
   "engines": {
