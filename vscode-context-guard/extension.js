@@ -174,11 +174,6 @@ const pick = (entries, focused) => {
 const isReminderDue = e =>
   e.isWatched && e.reminderEnabled && e.context.percent !== undefined && e.context.percent >= e.reminderPercent
 
-const chatLabel = e => {
-  const title = titleOf(e)
-  return `${title ? `${title} · ` : ''}${e.model || 'model unknown'} · used ${new Date(lastUsed(e)).toLocaleTimeString()}`
-}
-
 const tooltipFor = ({ chat: e, limits }, now) => {
   const t = new vscode.MarkdownString(undefined, true)
   t.isTrusted = { enabledCommands: ['contextGuard.showDetails', CLAUDE_FOCUS] }
@@ -205,7 +200,7 @@ const tooltipFor = ({ chat: e, limits }, now) => {
       `Handoff reminder ${e.reminderEnabled ? `at ${e.reminderPercent}%` : 'off'} · auto-compact ${e.compactEnabled ? `at ${e.compactPercent}%` : 'off'}\n\n`,
     )
   }
-  if (e) t.appendMarkdown(`---\n\n${path.basename(e.cwd)} · ${chatLabel(e)}\n\n`)
+  t.appendMarkdown('---\n\n')
   t.appendMarkdown(
     `[$(graph) Details](command:contextGuard.showDetails) · [$(comment-discussion) Open Claude](command:${CLAUDE_FOCUS})`,
   )
@@ -240,7 +235,6 @@ const detailsHtml = ({ chat: e, limits }, now) => {
         e.compactEnabled ? `at ${e.compactPercent}%` : 'off'
       } · handoff command <code>${escapeHtml(e.command)}</code></p>`
     }
-    body += `<p class="muted">${escapeHtml(path.basename(e.cwd))} · ${escapeHtml(chatLabel(e))}</p>`
   }
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
