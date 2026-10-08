@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"
@@ -18,8 +18,14 @@
       "title": "Handoff reminder threshold (%)",
       "description": "Context fill, as a percentage of the model's window, at which the reminder shows",
       "default": 60,
-      "min": 10,
+      "min": 1,
       "max": 95
+    },
+    "reminder_tell_model": {
+      "type": "boolean",
+      "title": "Reminder through Claude",
+      "description": "Besides the notice in the chat, ask Claude to mention the reminder at the start of its next reply (works in every surface, VS Code included)",
+      "default": false
     },
     "compact_enabled": {
       "type": "boolean",
@@ -32,7 +38,7 @@
       "title": "Auto-compact threshold (%)",
       "description": "Context fill, as a percentage of the model's window, at which the main conversation is compacted",
       "default": 65,
-      "min": 10,
+      "min": 1,
       "max": 95
     },
     "models": {
@@ -41,11 +47,25 @@
       "description": "Comma-separated fragments of model ids the reminder and auto-compact apply to (e.g. opus,sonnet); empty means every model",
       "default": "opus"
     },
+    "usage_band": {
+      "type": "boolean",
+      "title": "Usage line above the prompt",
+      "description": "Show context fill, the 5-hour and weekly usage limits and the session cost in the band above the prompt (terminal and the Claude Code panel in VS Code)",
+      "default": true
+    },
     "usage_status": {
       "type": "boolean",
       "title": "Usage status line",
-      "description": "Show context fill, the 5-hour and weekly usage limits and the session cost on the status line (terminal)",
+      "description": "Show the same usage line on the status line under the prompt (terminal only)",
       "default": true
+    },
+    "limit_warn_percent": {
+      "type": "number",
+      "title": "Usage limit warning (%)",
+      "description": "Post a notice in the chat once a 5-hour or weekly usage limit reaches this percentage; 0 turns it off",
+      "default": 80,
+      "min": 0,
+      "max": 100
     },
     "status_file": {
       "type": "boolean",

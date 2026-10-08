@@ -27,7 +27,12 @@ const measure = ($: Engine, percent: number) =>
 
 // Stands in for the engine beneath: a model that answers nothing, and a compaction counter.
 const engine = (on: On) => {
-  const compactions = { count: 0 }
+  const compactions = { count: 0, rows: [] as { type: string; text: string }[] }
+  on('session.append', (_$, e, next) => {
+    const block = e.message.content[0] as { text?: string } | undefined
+    compactions.rows.push({ type: e.message.type, text: block?.text ?? '' })
+    return next(e)
+  })
   on('turn.step', async function* (_$, e) {
     yield { kind: 'stop', stopReason: 'end_turn', usage: null }
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
@@ -134,4 +139,52 @@ test('the status line can be switched off', { options: { usage_status: false } }
   })
   await measure($, 12)
   expect(lines).toEqual([])
+})
+
+test('crossing the reminder posts a notice in the chat and a note for Claude', { options: { reminder_tell_model: true } }, async ($, on) => {
+  const engineSide = engine(on)
+  await mainStep($, 'claude-opus-5-5')
+  await measure($, 61)
+  const notice = engineSide.rows.find(r => r.type === 'system')
+  const note = engineSide.rows.find(r => r.type === 'user')
+  expect(notice?.text).toMatch(/Context at 61%.*context-guard:handoff/)
+  expect(note?.text).toMatch(/Start your next reply/)
+  await measure($, 62)
+  expect(engineSide.rows.length).toBe(2)
+})
+
+test('a usage limit past the warning level posts one notice', async ($, on) => {
+  const engineSide = engine(on)
+  const limits = [{ kind: 'five_hour', percentUsed: 85, resetsAt: new Date(Date.now() + 3_600_000).toISOString() }]
+  await $.session.measure({ context: { percent: 10, tokens: 100_000, window: WINDOW }, rateLimits: limits, changed: ['rateLimits'] })
+  await $.session.measure({ context: { percent: 11, tokens: 110_000, window: WINDOW }, rateLimits: limits, changed: ['context'] })
+  const notices = engineSide.rows.filter(r => /usage limit/.test(r.text))
+  expect(notices.length).toBe(1)
+  expect(notices[0]?.text).toMatch(/5h usage limit at 85%/)
+})
+
+test('the band above the prompt always carries the usage line, on every surface', async ($, on) => {
+  engine(on)
+  await mainStep($, 'claude-opus-5-5')
+  await $.session.measure({
+    context: { percent: 30, tokens: 300_000, window: WINDOW },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 63, resetsAt: new Date(Date.now() + 90 * 60_000).toISOString() }],
+    changed: ['context', 'rateLimits'],
+  })
+  for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect((await ui.find({ type: 'Text', text: /^ctx 30% \| 5h 63%/ }))?.text).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /handoff/ })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('the reminder is announced once per crossing, even across reloads of the state', async ($, on) => {
+  const engineSide = engine(on)
+  await mainStep($, 'claude-opus-5-5')
+  await measure($, 61)
+  await measure($, 62)
+  await measure($, 40)
+  await measure($, 63)
+  expect(engineSide.rows.filter(r => r.type === 'system' && /Context at/.test(r.text)).length).toBe(2)
 })

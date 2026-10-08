@@ -6,11 +6,14 @@ import { createSubagentCap } from './subagent-cap'
 
 const fill = atom({ plugin: 'context-guard', key: 'fill' } as const, null)
 const isHidden = atom({ plugin: 'context-guard', key: 'isHidden' } as const, false)
+const usageLine = atom({ plugin: 'context-guard', key: 'usageLine' } as const, null)
+const isReminded = atom({ plugin: 'context-guard', key: 'isReminded' } as const, false)
 
 const LIMIT_LABELS: Record<string, string> = { five_hour: '5h', seven_day: 'week', spend_limit: 'spend' }
 
 type Settings = {
   usageStatus: boolean
+  usageBand: boolean
   statusFile: boolean
   reminderEnabled: boolean
   reminderPercent: number
@@ -48,8 +51,8 @@ const until = (iso: string | undefined, now: number) => {
 
 const k = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}k`)
 
-// Context fill, usage limits and session cost on this plugin's status line.
-const showUsage = ($: EngineInterface, usage: Usage) => {
+// Context fill, usage limits and session cost as one line.
+const usageText = (usage: Usage) => {
   const now = Date.now()
   const parts: string[] = []
   if (usage.context.percent !== undefined) parts.push(`ctx ${usage.context.percent}%`)
@@ -58,7 +61,7 @@ const showUsage = ($: EngineInterface, usage: Usage) => {
     parts.push(`${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${left ? ` (reset ${left})` : ''}`)
   }
   if (usage.cost !== undefined) parts.push(`$${usage.cost.usd.toFixed(2)}`)
-  $.ui.status(parts.length > 0 ? parts.join(' | ') : undefined)
+  return parts.join(' | ')
 }
 
 const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage, model: string, isWatched: boolean) => {
@@ -81,9 +84,21 @@ const writeStatus = async ($: EngineInterface, settings: Settings, usage: Usage,
   await $.fs.write(`${home}/.claude/context-guard/sessions/${name}.json`, JSON.stringify(entry, null, 2))
 }
 
+// A row in the conversation itself: the one place every surface (terminal, VS Code,
+// desktop) shows. A notice the model never reads, and optionally a note it does,
+// so the next reply says it too.
+const tell = async ($: EngineInterface, notice: string, modelNote: string | undefined) => {
+  await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: notice }] } }).catch(() => undefined)
+  if (modelNote !== undefined) {
+    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: modelNote }] } }).catch(() => undefined)
+  }
+}
+
 // Status line and status file from one reading of the session's usage.
 const report = async ($: EngineInterface, settings: Settings, usage: Usage, model: string, isWatched: boolean) => {
-  if (settings.usageStatus) showUsage($, usage)
+  const line = usageText(usage)
+  if (settings.usageStatus) $.ui.status(line || undefined)
+  if (settings.usageBand) await update($, usageLine, () => line || null)
   if (settings.statusFile) await writeStatus($, settings, usage, model, isWatched).catch(() => undefined)
 }
 
@@ -92,12 +107,15 @@ export const register: Register = (on, options) => {
 
   const settings: Settings = {
     usageStatus: options.usage_status !== false,
+    usageBand: options.usage_band !== false,
     statusFile: options.status_file !== false,
     reminderEnabled: options.reminder_enabled !== false,
     reminderPercent: Number(options.reminder_percent ?? 60),
     compactEnabled: options.compact_enabled !== false,
     compactPercent: Number(options.compact_percent ?? 65),
   }
+  const tellModel = options.reminder_tell_model === true
+  const limitWarnPercent = Number(options.limit_warn_percent ?? 80)
   const models = String(options.models ?? 'opus')
     .split(',')
     .map(m => m.trim().toLowerCase())
@@ -107,12 +125,13 @@ export const register: Register = (on, options) => {
   // The main loop's model, as its last request named it: the context figures
   // below are the main conversation's, and the thresholds apply per model.
   let mainModel = ''
-  let lastPercent = 0
   let isCompacting = false
+  // Usage-limit windows already warned about, by kind and reset time.
+  const warnedLimits = new Set<string>()
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    if (!settings.usageStatus && !settings.statusFile) return r
+    if (!settings.usageStatus && !settings.usageBand && !settings.statusFile) return r
     const usage = await $.session.usage()
     await report($, settings, usage, mainModel, appliesTo(mainModel))
     return r
@@ -153,6 +172,16 @@ export const register: Register = (on, options) => {
     const r = await next(e)
     await report($, settings, e, mainModel, appliesTo(mainModel))
 
+    for (const limit of e.rateLimits) {
+      const key = `${limit.kind}@${limit.resetsAt ?? ''}`
+      if (limitWarnPercent > 0 && limit.percentUsed >= limitWarnPercent && !warnedLimits.has(key)) {
+        warnedLimits.add(key)
+        const left = until(limit.resetsAt, Date.now())
+        const label = LIMIT_LABELS[limit.kind] ?? limit.kind
+        await tell($, `⚠ [context-guard] ${label} usage limit at ${limit.percentUsed}%${left ? `, resets in ${left}` : ''}.`, undefined)
+      }
+    }
+
     const { percent, tokens, window } = e.context
     if (percent === undefined) return r
 
@@ -166,14 +195,25 @@ export const register: Register = (on, options) => {
 
     if (percent < settings.reminderPercent) {
       await update($, isHidden, () => false)
-    } else if (settings.reminderEnabled && lastPercent < settings.reminderPercent) {
-      $.ui.toast(`Context ${percent}%: time for /${$.plugin.name}:handoff`)
+      await update($, isReminded, () => false)
+    } else if (settings.reminderEnabled && !(await read($, isReminded))) {
+      await update($, isReminded, () => true)
+      const command = `/${$.plugin.name}:handoff`
+      const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
+      $.ui.toast(`Context ${percent}%: time for ${command}`)
+      await tell(
+        $,
+        `⚠ [context-guard] Context at ${percent}% (${k(now.tokens)}/${k(now.window)}): run ${command}, then /clear.${fallback}`,
+        tellModel
+          ? `[context-guard] The context window is at ${percent}%. Start your next reply with one short line telling the user so and suggesting ${command} followed by /clear; then carry on with their request.`
+          : undefined,
+      )
     }
-    lastPercent = percent
 
     if (settings.compactEnabled && percent >= settings.compactPercent && !isCompacting) {
       isCompacting = true
       $.ui.toast(`Context ${percent}% passed ${settings.compactPercent}%: compacting`)
+      await tell($, `⚠ [context-guard] Context at ${percent}% passed ${settings.compactPercent}%: compacting the conversation.`, undefined)
       // Between turns, as /compact runs; rejected while a turn runs, so the next measure retries.
       try {
         await $.session.compact()
@@ -187,21 +227,29 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (!settings.reminderEnabled || e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey) return next(e)
 
     const now = await read($, fill)
-    if (now === null || now.percent < settings.reminderPercent || (await read($, isHidden))) return next(e)
+    const isDue =
+      settings.reminderEnabled && now !== null && now.percent >= settings.reminderPercent && !(await read($, isHidden))
+    const line = settings.usageBand ? await read($, usageLine) : null
+    if (!isDue && line === null) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
 
     return (
-      <Box>
-        <Text color="yellow">
-          Context {now.percent}% ({k(now.tokens)}/{k(now.window)}): run /{$.plugin.name}:handoff, then /clear.
-          {fallback}{' '}
-        </Text>
-        <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
+      <Box flexDirection="column">
+        {isDue && now !== null ? (
+          <Box>
+            <Text color="yellow">
+              Context {now.percent}% ({k(now.tokens)}/{k(now.window)}): run /{$.plugin.name}:handoff, then /clear.
+              {fallback}{' '}
+            </Text>
+            <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
+          </Box>
+        ) : null}
+        {line !== null ? <Text dimColor>{line}</Text> : null}
       </Box>
     )
   })
