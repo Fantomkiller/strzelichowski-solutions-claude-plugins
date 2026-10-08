@@ -4,7 +4,7 @@ Marketplace `strzelichowski-solutions` with one plugin, `context-guard`, plus an
 
 ## Install
 
-In Claude Code (terminal or VS Code panel):
+**1. The plugin.** In Claude Code in a terminal (the Claude Code panel in VS Code does not offer `/plugin`):
 
 ```
 /plugin marketplace add Fantomkiller/strzelichowski-solutions-claude-plugins
@@ -21,14 +21,22 @@ claude plugin install context-guard@strzelichowski-solutions --config reminder_p
 In VS Code you can also open this link, which goes straight to the plugin's install dialog:
 `vscode://anthropic.claude-code/install-plugin?plugin=context-guard&marketplace=Fantomkiller/strzelichowski-solutions-claude-plugins`
 
-From a local copy (unzipped or cloned), pass its path to `marketplace add` instead. Start a new session afterwards.
+From a local copy (unzipped or cloned), pass its path to `marketplace add` instead. Start new sessions afterwards. Later updates: `claude plugin marketplace update strzelichowski-solutions`, then `claude plugin update context-guard@strzelichowski-solutions`.
 
-Optionally, VS Code users can also install the status bar extension, which shows the same figures on VS Code's own status bar, each colored by its level (hover for bars and reset times, click for a menu with a usage panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
+**2. Haiku 5.5 subagents (recommended).** So that they compact at ~95k, under their 5x price step at 100k, add to `~/.claude/settings.json` (details in [Subagent compaction](#subagent-compaction)):
+
+```json
+{ "modelSettings": { "claude-haiku-5-5": { "autoCompactWindow": 128000 } } }
+```
+
+**3. VS Code (optional).** The status bar extension shows context fill and the usage limits on VS Code's own status bar, each colored by its level (hover for bars and reset times, click for a menu with a usage panel). Each window shows the Claude chat in front of you: the chat tab you switched to last (matched by its title), or the chat you used last (a prompt sent, a turn ended), never one from another project; a new chat with no reading yet, or a window with no chat, shows only the account's usage limits:
 
 ```
 gh release download --repo Fantomkiller/strzelichowski-solutions-claude-plugins --pattern '*.vsix'   # or take it from vscode-context-guard/ in a clone
 code --install-extension context-guard-status.vsix
 ```
+
+Then run "Developer: Reload Window" in each VS Code window.
 
 ## What it does
 
