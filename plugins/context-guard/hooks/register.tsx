@@ -71,15 +71,18 @@ const usageParts = (usage: Usage, settings: Settings): UsagePart[] => {
   const parts: UsagePart[] = []
   if (usage.context.percent !== undefined) {
     const score = contextScore(usage.context.percent, settings.reminderPercent, settings.compactPercent)
-    parts.push({ text: `ctx ${usage.context.percent}%`, color: colorOf(score) })
+    const text = `ctx ${usage.context.percent}%`
+    parts.push({ text, short: text, color: colorOf(score) })
   }
   for (const limit of usage.rateLimits) {
     const left = until(limit.resetsAt, now)
     const { score, limitInMs } = limitScore(limit.kind, limit.percentUsed, limit.resetsAt, now)
     const soon = limitInMs !== undefined ? until(new Date(now + limitInMs).toISOString(), now) : ''
     const notes = [left ? `reset ${left}` : '', soon ? `limit in ~${soon}` : ''].filter(n => n !== '').join(', ')
+    const label = `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%`
     parts.push({
-      text: `${LIMIT_LABELS[limit.kind] ?? limit.kind} ${limit.percentUsed}%${notes ? ` (${notes})` : ''}`,
+      text: `${label}${notes ? ` (${notes})` : ''}`,
+      short: `${label}${soon ? ` (limit ~${soon})` : ''}`,
       color: colorOf(score),
     })
   }
@@ -116,10 +119,12 @@ const tell = async ($: EngineInterface, notice: string) => {
   await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: notice }] } }).catch(() => undefined)
 }
 
-// Status line and band from one reading of the session's usage.
+// Status line and band from one reading of the session's usage. The status line is the
+// terminal's: the VS Code panel shows it as a second copy of the band, so it is left out there.
 const report = async ($: EngineInterface, settings: Settings, usage: Usage) => {
   const parts = usageParts(usage, settings)
-  if (settings.usageStatus) $.ui.status(usageText(parts) || undefined)
+  const surfaces: readonly string[] = await $.session.surfaces().catch(() => [])
+  if (settings.usageStatus && surfaces.includes('terminal')) $.ui.status(usageText(parts) || undefined)
   if (settings.usageBand) await update($, usageLine, () => (parts.length > 0 ? parts : null))
 }
 
@@ -367,6 +372,9 @@ export const register: Register = (on, options) => {
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const fallback = settings.compactEnabled ? ` Auto-compact at ${settings.compactPercent}%.` : ''
+    // The VS Code panel frames the band and its status bar extension has the reset times:
+    // one short line there.
+    const isPanel = e.surface === 'vscode'
 
     return (
       <Box flexDirection="column">
@@ -383,8 +391,8 @@ export const register: Register = (on, options) => {
           <Box>
             {line.map((part, i) => (
               <Text key={`part${i}`} color={part.color}>
-                {i > 0 ? ' | ' : ''}
-                {part.text}
+                {i > 0 ? (isPanel ? ' · ' : ' | ') : ''}
+                {isPanel ? part.short : part.text}
               </Text>
             ))}
           </Box>

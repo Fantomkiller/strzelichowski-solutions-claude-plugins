@@ -40,6 +40,7 @@ const engine = (on: On) => {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   on('session.measure', (_$, e) => ({ changed: e.changed }))
+  on('session.surfaces', () => ({ value: ['terminal'] }))
   on('session.compact', () => {
     compactions.count += 1
     return { messages: [{ role: 'user', text: 'summary', toolUses: [] }] }
@@ -216,21 +217,38 @@ test('a usage limit past the warning level posts one notice', async ($, on) => {
   expect(notices[0]?.text).toMatch(/5h usage limit at 85%/)
 })
 
-test('the band above the prompt always carries the usage line, on every surface', async ($, on) => {
+test('the band above the prompt carries the usage line: in full in the terminal, short in the VS Code panel', async ($, on) => {
   engine(on)
   await mainStep($, 'claude-opus-5-5')
   await $.session.measure({
     context: { percent: 30, tokens: 300_000, window: WINDOW },
-    rateLimits: [{ kind: 'five_hour', percentUsed: 63, resetsAt: new Date(Date.now() + 90 * 60_000).toISOString() }],
+    rateLimits: [{ kind: 'five_hour', percentUsed: 63, resetsAt: new Date(Date.now() + 4 * 3_600_000 - 5 * 60_000).toISOString() }],
     changed: ['context', 'rateLimits'],
   })
-  for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
+  for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     expect((await ui.find({ type: 'Text', text: /^ctx 30%$/ }))?.text).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: /^ \| 5h 63%/ }))?.text).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^ \| 5h 63% \(reset 3h\d+m, limit in ~\d+m\)$/ }))?.text).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /handoff/ })).toBeUndefined()
     await ui.unmount()
   }
+  const panel = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect((await panel.find({ type: 'Text', text: /^ctx 30%$/ }))?.text).toBeDefined()
+  // 63% an hour into five: past the pace, so the line says when; no reset time.
+  expect((await panel.find({ type: 'Text', text: /^ · 5h 63% \(limit ~\d+m\)$/ }))?.text).toBeDefined()
+  await panel.unmount()
+})
+
+test('the status line is the terminal\'s alone', async ($, on) => {
+  const compactions = engine(on)
+  void compactions
+  const lines: (string | undefined)[] = []
+  on('ui.status', (_$, e) => {
+    lines.push(e.text)
+    return { value: undefined }
+  })
+  await measure($, 12)
+  expect(lines.at(-1)).toMatch(/^ctx 12%/)
 })
 
 test('each figure of the usage line is colored on the green-to-red scale', async ($, on) => {

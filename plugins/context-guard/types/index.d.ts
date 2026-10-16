@@ -1,7 +1,8 @@
 export type Fill = { percent: number; tokens: number; window: number }
 
-// One figure of the usage line and its color on the green-to-red scale.
-export type UsagePart = { text: string; color: string }
+// One figure of the usage line, in full (terminal) and short (the VS Code panel), and its
+// color on the green-to-red scale.
+export type UsagePart = { text: string; short: string; color: string }
 
 declare module 'claude-code' {
   interface PluginState {

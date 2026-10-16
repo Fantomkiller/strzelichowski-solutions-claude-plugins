@@ -1,6 +1,6 @@
 {
   "name": "context-guard",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Session handoff (/context-guard:handoff), a handoff reminder and auto-compact by context fill, usage limits on the status line, and a token ceiling for subagents",
   "author": {
     "name": "Miłosz Strzelichowski"
@@ -44,13 +44,13 @@
     "usage_band": {
       "type": "boolean",
       "title": "Usage line above the prompt",
-      "description": "Show context fill and the 5-hour and weekly usage limits in the band above the prompt (terminal)",
+      "description": "Show context fill and the 5-hour and weekly usage limits in the band above the prompt: in full in the terminal, as one short line in the Claude Code panel in VS Code",
       "default": true
     },
     "usage_status": {
       "type": "boolean",
       "title": "Usage status line",
-      "description": "Show the same usage line on the status line under the prompt (terminal only)",
+      "description": "Show the same usage line on the status line under the prompt (terminal only; the VS Code panel would show it as a second copy)",
       "default": true
     },
     "limit_warn_percent": {
