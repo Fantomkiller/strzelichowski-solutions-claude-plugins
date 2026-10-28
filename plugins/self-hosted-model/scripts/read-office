@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Print a .docx / .xlsx / .xls / .csv file as plain text so the model can read it."""
+import argparse
+import pathlib
+import sys
+
+
+def read_docx(path):
+    import docx
+
+    doc = docx.Document(path)
+    for p in doc.paragraphs:
+        if not p.text.strip():
+            continue
+        style = p.style.name if p.style is not None else ""
+        level = style[-1] if style.startswith("Heading") and style[-1:].isdigit() else ""
+        print(("#" * int(level) + " " if level else "") + p.text)
+    for i, table in enumerate(doc.tables, 1):
+        print(f"\n## Table {i}")
+        for row in table.rows:
+            print(" | ".join(c.text.strip() for c in row.cells))
+
+
+def read_sheets(path, max_rows):
+    import pandas as pd
+
+    if path.suffix.lower() == ".csv":
+        sheets = {"csv": pd.read_csv(path, dtype=str, sep=None, engine="python")}
+    else:
+        sheets = pd.read_excel(path, sheet_name=None, dtype=str)
+    for name, df in sheets.items():
+        print(f"\n## Sheet: {name} ({len(df)} rows, {len(df.columns)} columns)")
+        print(df.head(max_rows).fillna("").to_csv(index=False, sep=";"))
+        if len(df) > max_rows:
+            print(f"... showing {max_rows} of {len(df)} rows. Compute over the whole sheet with a pandas script.")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("file")
+    ap.add_argument("--max-rows", type=int, default=200)
+    a = ap.parse_args()
+    path = pathlib.Path(a.file)
+    ext = path.suffix.lower()
+    if ext == ".docx":
+        read_docx(path)
+    elif ext in (".xlsx", ".xlsm", ".xls", ".csv"):
+        read_sheets(path, a.max_rows)
+    else:
+        sys.exit(f"Unsupported format: {ext} (supported: .docx .xlsx .xlsm .xls .csv)")
+
+
+if __name__ == "__main__":
+    main()
