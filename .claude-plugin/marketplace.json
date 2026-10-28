@@ -3,17 +3,12 @@
   "owner": {
     "name": "Miłosz Strzelichowski"
   },
-  "description": "Claude Code plugins by Strzelichowski Solutions: session handoff, context guards and a self-hosted model for private files",
+  "description": "Claude Code plugins by Strzelichowski Solutions: session handoff and context guards",
   "plugins": [
     {
       "name": "context-guard",
       "source": "./plugins/context-guard",
       "description": "Session handoff (/context-guard:handoff), handoff reminder at 60% and auto-compact at 65% context, usage limits on the status line, and a token ceiling for Haiku 5.5 subagents; all configurable in /config"
-    },
-    {
-      "name": "self-hosted-model",
-      "source": "./plugins/self-hosted-model",
-      "description": "Claude Code on your own OpenAI-compatible model in one private folder (/self-hosted-model:setup), with Word and Excel support and a guard that keeps Claude sessions out of that folder; macOS"
     }
   ]
 }

@@ -1,8 +1,0 @@
-{
-  "name": "self-hosted-model",
-  "version": "0.1.0",
-  "description": "Run Claude Code on your own OpenAI-compatible model (Open WebUI, vLLM, Ollama) in one private folder, with Word and Excel support and a guard that keeps other sessions out of that folder",
-  "author": {
-    "name": "Miłosz Strzelichowski"
-  }
-}

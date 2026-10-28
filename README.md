@@ -1,6 +1,6 @@
 # Strzelichowski Solutions: Claude Code plugins
 
-Marketplace `strzelichowski-solutions` with two plugins: `context-guard`, plus an optional VS Code extension that shows its status, and [`self-hosted-model`](#self-hosted-model), which runs Claude Code on your own model in one private folder. Requires Claude Code 2.1.292 or later (`claude --version`).
+Marketplace `strzelichowski-solutions` with the `context-guard` plugin, plus an optional VS Code extension that shows its status. Requires Claude Code 2.1.292 or later (`claude --version`).
 
 ![VS Code status bar and hover](docs/screens/07-vscode-status-bar.png)
 
@@ -130,41 +130,6 @@ Measured on a Haiku 5.5 subagent reading 25 files of ~13k tokens each: it compac
 The plugin's options follow the same numbers: **Subagent compaction point** (95000) is where Claude Code compacts, and a tool result that fits after that compaction passes whole; only a result too large even then is cut to stay under the **ceiling** (100000).
 
 **Subagent sizing guidance** (on by default) adds a short section to the orchestrator's system prompt (the models for reminder and auto-compact, `opus` by default). It does not change when the orchestrator delegates or to which model: that stays its own call, or yours. Once it delegates to a capped subagent: prefer several small ones whose reading fits in their room (about 60k), split large inputs, ask for compact answers. Each capped subagent's task also gets one paragraph with its budget and an instruction to carry on after a compaction.
-
-## self-hosted-model
-
-Claude Code on your own OpenAI-compatible model (Open WebUI, vLLM, Ollama and the like) for one folder, `~/AI-private` by default. Sessions opened in that folder talk only to your model; every other folder keeps using Claude as before. Use it when files must not leave your servers: put them in the folder, open the folder in its own VS Code window, and switch windows to switch models. macOS only.
-
-**Install.** Add the marketplace and the plugin as in [Install](#install) (`self-hosted-model@strzelichowski-solutions`), or open
-`vscode://anthropic.claude-code/install-plugin?plugin=self-hosted-model&marketplace=Fantomkiller/strzelichowski-solutions-claude-plugins`.
-Then, in a new session:
-
-```
-/self-hosted-model:setup <base-url> <main-model> [simple-model] [folder-name]
-```
-
-`<base-url>` is the server's OpenAI-compatible root, the one that answers `GET <base-url>/models` (for Open WebUI that is `https://<host>/api`). A macOS dialog asks for the API key, so it never enters the chat. Setup takes a few minutes, can be run again at any time to repair or update, and opens the folder in a new VS Code window at the end. `/self-hosted-model:uninstall` removes everything except the folder and its files.
-
-**What setup does.**
-
-| Step | Result |
-| --- | --- |
-| [uv](https://docs.astral.sh/uv/), LiteLLM 1.102.1 (pinned) | a local proxy that translates Claude Code's Anthropic API calls to your server's OpenAI API |
-| Python 3.12 with pandas, openpyxl, python-docx | `read-office` prints .docx/.xlsx/.xls/.csv as text; the model writes and runs scripts for calculations and new files |
-| Key check | the key works and both models exist on the server, before anything is saved |
-| Keys in `~/.config/self-hosted-model/` (mode 600) | the API key and a random key for the local proxy |
-| LaunchAgent on `127.0.0.1:4000` | the proxy starts at login and restarts if it stops; only the given models are reachable, with no fallbacks |
-| The folder with `CLAUDE.md` and `.claude/settings.local.json` | Claude Code there runs on your model (every model alias maps to it, subagents included), with telemetry, web tools and claude.ai connectors off; results go to `results/` and source files are never overwritten |
-
-**The guard.** The plugin's hook blocks a prompt or a tool call that mentions the folder in any session that does not run on the proxy, for example the folder opened in a window where its settings did not load, or a file path from it typed into a Claude chat. Claude Code may still send a short title request for a blocked prompt to Claude, so do not paste private content into a Claude chat.
-
-**Good to know.**
-
-- Anthropic does not support Claude Code on non-Claude models through a gateway; it works, but expect rough edges, and an open-weight model handles long multi-step tasks less well than Claude. Short, concrete tasks work best.
-- No subscription usage: those sessions never reach Anthropic. Claude Code still shows a cost estimate, priced at a default rate; nobody is billed it.
-- Claude Code resends its system prompt and tool definitions on every step, so a simple task can take a few hundred thousand input tokens on your server.
-- Claude Code notes that it does not know the model and assumes a 200k context window; that is harmless.
-- Session transcripts, with the content the model read, stay on disk in `~/.claude/projects/`.
 
 ## Development
 
