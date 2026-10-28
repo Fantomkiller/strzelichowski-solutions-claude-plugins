@@ -65,6 +65,10 @@ The terminal captures come from a real session (Claude Code 2.1.293, Claude Haik
 
 ![VS Code handoff reminder](docs/screens/08-vscode-handoff-reminder.png)
 
+**Band in the Claude Code panel** (2.1.300 and later): one short line above the prompt with context and both usage limits, on the same green-to-red scale:
+
+![Band in the Claude Code panel](docs/screens/09-vscode-panel-band.png)
+
 **Usage line** above the prompt (and, in the terminal, on the status line):
 
 ![Usage line](docs/screens/01-usage-line.png)
