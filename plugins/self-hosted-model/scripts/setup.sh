@@ -63,7 +63,8 @@ else
   if [ -z "$KEY" ] && [ -t 0 ]; then read -rsp "API key: " KEY; echo; fi
 fi
 [ -n "$KEY" ] || fail "no API key (dialog cancelled)"
-MODELS="$(curl -s -m 30 -w '\n%{http_code}' -H "Authorization: Bearer $KEY" "$BASE_URL/models")" || fail "cannot reach $BASE_URL"
+# The header goes through stdin so the key does not show up in ps.
+MODELS="$(curl -s -m 30 -w '\n%{http_code}' -H @- "$BASE_URL/models" <<<"Authorization: Bearer $KEY")" || fail "cannot reach $BASE_URL"
 [ "$(tail -n1 <<<"$MODELS")" = "200" ] || fail "the server refused the key ($BASE_URL/models: HTTP $(tail -n1 <<<"$MODELS"))"
 sed '$d' <<<"$MODELS" | "$PY" -c '
 import json, sys
